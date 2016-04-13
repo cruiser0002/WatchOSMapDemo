@@ -8,14 +8,44 @@
 
 import WatchKit
 import Foundation
-
+import CoreLocation
 
 class InterfaceController: WKInterfaceController {
 
+    @IBOutlet var map: WKInterfaceMap!
+    @IBOutlet var slider: WKInterfaceSlider!
+    
+    var timer = NSTimer()
+    var timer2 = NSTimer()
+    
+    var locationManager: CLLocationManager = CLLocationManager()
+    var mapLocation: CLLocationCoordinate2D?
+    var span : MKCoordinateSpan?
+    
+    
     override func awakeWithContext(context: AnyObject?) {
         super.awakeWithContext(context)
         
         // Configure interface objects here.
+        
+//        locationManager.requestWhenInUseAuthorization()
+        locationManager.requestAlwaysAuthorization()
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager.delegate = self
+        locationManager.requestLocation()
+        
+        
+        timer = NSTimer(timeInterval: 1.0, target: self, selector: "countUp", userInfo: nil, repeats: true)
+        NSRunLoop.currentRunLoop().addTimer(timer, forMode: NSRunLoopCommonModes)
+        
+                
+        self.span = MKCoordinateSpanMake(0.1, 0.1)
+//        self.region = MKCoordinateRegionMake(self.mapLocation!, span)
+        
+    }
+    
+    func countUp() {
+        locationManager.requestLocation()
     }
 
     override func willActivate() {
@@ -28,4 +58,39 @@ class InterfaceController: WKInterfaceController {
         super.didDeactivate()
     }
 
+    @IBAction func changeMapRegion(value: Float) {
+        
+        let degrees:CLLocationDegrees = CLLocationDegrees(value / 200)
+        
+        self.span = MKCoordinateSpanMake(degrees, degrees)
+        let region = MKCoordinateRegionMake(mapLocation!, span!)
+        
+        map.setRegion(region)
+    }
+    
+}
+
+
+extension InterfaceController: CLLocationManagerDelegate {
+    func locationManager(manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        
+        let currentLocation = locations[0]
+        let lat = currentLocation.coordinate.latitude
+        let long = currentLocation.coordinate.longitude
+        
+        self.mapLocation = CLLocationCoordinate2DMake(lat, long)
+        
+        let region = MKCoordinateRegionMake(self.mapLocation!, span!)
+        
+        self.map.setRegion(region)
+        
+        self.map.removeAllAnnotations()
+        self.map.addAnnotation(self.mapLocation!, withPinColor: .Red)
+    }
+    
+    func locationManager(manager: CLLocationManager, didFailWithError error: NSError) {
+        
+        print(error.description)
+    }
+    
 }
