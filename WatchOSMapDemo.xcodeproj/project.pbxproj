@@ -16,9 +16,12 @@
 		E07A40D11CBEC01A0041125F /* Interface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E07A40CF1CBEC01A0041125F /* Interface.storyboard */; };
 		E07A40D31CBEC01A0041125F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E07A40D21CBEC01A0041125F /* Assets.xcassets */; };
 		E07A40DA1CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E07A40D91CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		E07A40DF1CBEC01A0041125F /* InterfaceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A40DE1CBEC01A0041125F /* InterfaceController.swift */; };
+		E07A40DF1CBEC01A0041125F /* NativeInterfaceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A40DE1CBEC01A0041125F /* NativeInterfaceController.swift */; };
 		E07A40E11CBEC01A0041125F /* ExtensionDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A40E01CBEC01A0041125F /* ExtensionDelegate.swift */; };
 		E07A40E31CBEC01A0041125F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E07A40E21CBEC01A0041125F /* Assets.xcassets */; };
+		E0C3556F1CBEFC3600919E87 /* MainInterfaceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C3556E1CBEFC3600919E87 /* MainInterfaceController.swift */; };
+		E0C355711CBEFFF200919E87 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C355701CBEFFF200919E87 /* Constants.swift */; };
+		E0C355721CBEFFF200919E87 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C355701CBEFFF200919E87 /* Constants.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,10 +79,12 @@
 		E07A40D21CBEC01A0041125F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E07A40D41CBEC01A0041125F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E07A40D91CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "WatchOSMapDemo WatchKit Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
-		E07A40DE1CBEC01A0041125F /* InterfaceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InterfaceController.swift; sourceTree = "<group>"; };
+		E07A40DE1CBEC01A0041125F /* NativeInterfaceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeInterfaceController.swift; sourceTree = "<group>"; };
 		E07A40E01CBEC01A0041125F /* ExtensionDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionDelegate.swift; sourceTree = "<group>"; };
 		E07A40E21CBEC01A0041125F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E07A40E41CBEC01A0041125F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E0C3556E1CBEFC3600919E87 /* MainInterfaceController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MainInterfaceController.swift; sourceTree = "<group>"; };
+		E0C355701CBEFFF200919E87 /* Constants.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,6 +108,7 @@
 		E07A40AF1CBEC01A0041125F = {
 			isa = PBXGroup;
 			children = (
+				E0C355731CBEFFF800919E87 /* Common */,
 				E07A40BA1CBEC01A0041125F /* WatchOSMapDemo */,
 				E07A40CE1CBEC01A0041125F /* WatchOSMapDemo WatchKit App */,
 				E07A40DD1CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension */,
@@ -146,12 +152,21 @@
 		E07A40DD1CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension */ = {
 			isa = PBXGroup;
 			children = (
-				E07A40DE1CBEC01A0041125F /* InterfaceController.swift */,
+				E0C3556E1CBEFC3600919E87 /* MainInterfaceController.swift */,
+				E07A40DE1CBEC01A0041125F /* NativeInterfaceController.swift */,
 				E07A40E01CBEC01A0041125F /* ExtensionDelegate.swift */,
 				E07A40E21CBEC01A0041125F /* Assets.xcassets */,
 				E07A40E41CBEC01A0041125F /* Info.plist */,
 			);
 			path = "WatchOSMapDemo WatchKit Extension";
+			sourceTree = "<group>";
+		};
+		E0C355731CBEFFF800919E87 /* Common */ = {
+			isa = PBXGroup;
+			children = (
+				E0C355701CBEFFF200919E87 /* Constants.swift */,
+			);
+			name = Common;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -288,6 +303,7 @@
 			files = (
 				E07A40BE1CBEC01A0041125F /* ViewController.swift in Sources */,
 				E07A40BC1CBEC01A0041125F /* AppDelegate.swift in Sources */,
+				E0C355711CBEFFF200919E87 /* Constants.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -295,8 +311,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E0C3556F1CBEFC3600919E87 /* MainInterfaceController.swift in Sources */,
 				E07A40E11CBEC01A0041125F /* ExtensionDelegate.swift in Sources */,
-				E07A40DF1CBEC01A0041125F /* InterfaceController.swift in Sources */,
+				E07A40DF1CBEC01A0041125F /* NativeInterfaceController.swift in Sources */,
+				E0C355721CBEFFF200919E87 /* Constants.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

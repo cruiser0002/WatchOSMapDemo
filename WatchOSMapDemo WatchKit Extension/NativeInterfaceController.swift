@@ -1,5 +1,5 @@
 //
-//  InterfaceController.swift
+//  NativeInterfaceController.swift
 //  WatchOSMapDemo WatchKit Extension
 //
 //  Created by Jay on 4/13/16.
@@ -10,7 +10,7 @@ import WatchKit
 import Foundation
 import CoreLocation
 
-class InterfaceController: WKInterfaceController {
+class NativeInterfaceController: WKInterfaceController {
 
     @IBOutlet var map: WKInterfaceMap!
     @IBOutlet var slider: WKInterfaceSlider!
@@ -26,6 +26,8 @@ class InterfaceController: WKInterfaceController {
     override func awakeWithContext(context: AnyObject?) {
         super.awakeWithContext(context)
         
+//        print("native: awake with context")
+        
         // Configure interface objects here.
         
 //        locationManager.requestWhenInUseAuthorization()
@@ -35,7 +37,7 @@ class InterfaceController: WKInterfaceController {
         locationManager.requestLocation()
         
         
-        timer = NSTimer(timeInterval: 1.0, target: self, selector: "countUp", userInfo: nil, repeats: true)
+        timer = NSTimer(timeInterval: 1.0, target: self, selector: "updateLocation", userInfo: nil, repeats: true)
         NSRunLoop.currentRunLoop().addTimer(timer, forMode: NSRunLoopCommonModes)
         
                 
@@ -44,18 +46,23 @@ class InterfaceController: WKInterfaceController {
         
     }
     
-    func countUp() {
+    func updateLocation() {
         locationManager.requestLocation()
     }
 
     override func willActivate() {
         // This method is called when watch view controller is about to be visible to user
         super.willActivate()
+//        print("native: will activate")
+        
     }
 
     override func didDeactivate() {
         // This method is called when watch view controller is no longer visible
         super.didDeactivate()
+//        print("native: did deactivate")
+        timer.invalidate()
+        
     }
 
     @IBAction func changeMapRegion(value: Float) {
@@ -63,6 +70,10 @@ class InterfaceController: WKInterfaceController {
         let degrees:CLLocationDegrees = CLLocationDegrees(value / 200)
         
         self.span = MKCoordinateSpanMake(degrees, degrees)
+        
+        if (mapLocation == nil || span == nil) {
+            return
+        }
         let region = MKCoordinateRegionMake(mapLocation!, span!)
         
         map.setRegion(region)
@@ -71,7 +82,7 @@ class InterfaceController: WKInterfaceController {
 }
 
 
-extension InterfaceController: CLLocationManagerDelegate {
+extension NativeInterfaceController: CLLocationManagerDelegate {
     func locationManager(manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         
         let currentLocation = locations[0]
