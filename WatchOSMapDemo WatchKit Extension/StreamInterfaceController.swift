@@ -13,11 +13,14 @@ import WatchConnectivity
 
 class StreamInterfaceController: WKInterfaceController, WCSessionDelegate, CLLocationManagerDelegate {
     
-    @IBOutlet var stopButton: WKInterfaceButton!
-    @IBOutlet var startButton: WKInterfaceButton!
-    
+
+    @IBOutlet var map: WKInterfaceMap!
+    @IBOutlet var slider: WKInterfaceSlider!
+
     let session = WCSession.defaultSession()
     var manager: CLLocationManager?
+    var mapLocation: CLLocationCoordinate2D?
+    var span : MKCoordinateSpan?
     
     
     override func awakeWithContext(context: AnyObject?) {
@@ -25,18 +28,22 @@ class StreamInterfaceController: WKInterfaceController, WCSessionDelegate, CLLoc
         
         session.delegate = self
         session.activateSession()
+        self.span = MKCoordinateSpanMake(0.1, 0.1)
+        
     }
     
     override func willActivate() {
 //        sendLocationUpdateStatusCommand()
         
         super.willActivate()
+        
+        startPressed()
     }
     
     override func didDeactivate() {
         // This method is called when watch view controller is no longer visible
-        
-//        sendStopUpdatingLocationCommand()
+
+        stopPressed()
         
         super.didDeactivate()
         //        print("native: did deactivate")
@@ -44,7 +51,7 @@ class StreamInterfaceController: WKInterfaceController, WCSessionDelegate, CLLoc
         
         
     }
-    @IBAction func startPressed() {
+    func startPressed() {
         guard session.reachable else {
             print("watchos error: ios device unreachable")
             return
@@ -68,7 +75,7 @@ class StreamInterfaceController: WKInterfaceController, WCSessionDelegate, CLLoc
         
     }
     
-    @IBAction func stopPressed() {
+    func stopPressed() {
         guard session.reachable else {
             print("watchos error: ios device unreachable")
             return
@@ -151,10 +158,40 @@ class StreamInterfaceController: WKInterfaceController, WCSessionDelegate, CLLoc
                 print(applicationContext)
                 return
             }
-            print(location[MessageKey.Longitude.rawValue])
+//            print(location[MessageKey.Longitude.rawValue])
             
+            guard let lat = location[MessageKey.Latitude.rawValue] as? CLLocationDegrees,
+            let long = location[MessageKey.Longitude.rawValue] as? CLLocationDegrees else
+            {
+                return
+            }
+            
+            self.mapLocation = CLLocationCoordinate2DMake(lat, long)
+            
+            let region = MKCoordinateRegionMake(self.mapLocation!, self.span!)
+            
+            self.map.setRegion(region)
+            self.map.removeAllAnnotations()
+            self.map.addAnnotation(self.mapLocation!, withPinColor: .Red)
         }
     }
+    
+    
+    @IBAction func changeMapRegion(value: Float) {
+        
+        let degrees:CLLocationDegrees = CLLocationDegrees(value / 200)
+        
+        self.span = MKCoordinateSpanMake(degrees, degrees)
+        
+        if (mapLocation == nil || span == nil) {
+            return
+        }
+        let region = MKCoordinateRegionMake(mapLocation!, span!)
+        
+        map.setRegion(region)
+        
+    }
+    
     
     /// MARK - CLLocationManagerDelegate Methods
     

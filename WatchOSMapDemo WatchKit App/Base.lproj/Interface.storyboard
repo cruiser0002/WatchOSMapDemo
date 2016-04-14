@@ -54,20 +54,16 @@
             <objects>
                 <controller identifier="StreamInterfaceController" title="Stream" id="9uF-8x-3Uu" userLabel="StreamInterfaceController" customClass="StreamInterfaceController" customModule="WatchOSMapDemo_WatchKit_Extension">
                     <items>
-                        <button width="1" alignment="left" title="start" id="McO-Ea-Cuh">
+                        <slider width="1" alignment="left" verticalAlignment="bottom" value="1" minimum="1" maximum="10" steps="3" id="HmE-iV-YC1">
                             <connections>
-                                <action selector="startPressed" destination="9uF-8x-3Uu" id="pKT-Ev-kqt"/>
+                                <action selector="changeMapRegion:" destination="9uF-8x-3Uu" id="pnR-jW-qFu"/>
                             </connections>
-                        </button>
-                        <button width="1" alignment="left" title="stop" id="hf2-Tj-cmM">
-                            <connections>
-                                <action selector="stopPressed" destination="9uF-8x-3Uu" id="fOJ-VH-Ix7"/>
-                            </connections>
-                        </button>
+                        </slider>
+                        <map height="1" alignment="left" id="jHI-dk-fXv"/>
                     </items>
                     <connections>
-                        <outlet property="startButton" destination="McO-Ea-Cuh" id="s8c-Q3-mOg"/>
-                        <outlet property="stopButton" destination="hf2-Tj-cmM" id="0eQ-sB-bBa"/>
+                        <outlet property="map" destination="jHI-dk-fXv" id="OCY-OL-Tf3"/>
+                        <outlet property="slider" destination="HmE-iV-YC1" id="ohB-h4-dqb"/>
                     </connections>
                 </controller>
             </objects>
