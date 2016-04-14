@@ -85,7 +85,7 @@ class NativeInterfaceController: WKInterfaceController {
 extension NativeInterfaceController: CLLocationManagerDelegate {
     func locationManager(manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         
-        let currentLocation = locations[0]
+        let currentLocation = locations.last!
         let lat = currentLocation.coordinate.latitude
         let long = currentLocation.coordinate.longitude
         

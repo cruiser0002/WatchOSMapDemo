@@ -15,7 +15,11 @@
                                 <segue destination="AgC-eL-Hgc" kind="push" id="3Sy-iM-HWl"/>
                             </connections>
                         </button>
-                        <button width="1" alignment="left" verticalAlignment="bottom" title="Stream" id="gGD-Y7-yx8"/>
+                        <button width="1" alignment="left" verticalAlignment="bottom" title="Stream" id="gGD-Y7-yx8">
+                            <connections>
+                                <segue destination="9uF-8x-3Uu" kind="push" id="mFn-dN-Zbq"/>
+                            </connections>
+                        </button>
                     </items>
                     <connections>
                         <outlet property="nativeButton" destination="hGJ-ez-4ve" id="M4X-mu-lyT"/>
@@ -44,6 +48,30 @@
                 </controller>
             </objects>
             <point key="canvasLocation" x="533" y="344.5"/>
+        </scene>
+        <!--StreamInterfaceController-->
+        <scene sceneID="jvr-pA-Vuu">
+            <objects>
+                <controller identifier="StreamInterfaceController" title="Stream" id="9uF-8x-3Uu" userLabel="StreamInterfaceController" customClass="StreamInterfaceController" customModule="WatchOSMapDemo_WatchKit_Extension">
+                    <items>
+                        <button width="1" alignment="left" title="start" id="McO-Ea-Cuh">
+                            <connections>
+                                <action selector="startPressed" destination="9uF-8x-3Uu" id="pKT-Ev-kqt"/>
+                            </connections>
+                        </button>
+                        <button width="1" alignment="left" title="stop" id="hf2-Tj-cmM">
+                            <connections>
+                                <action selector="stopPressed" destination="9uF-8x-3Uu" id="fOJ-VH-Ix7"/>
+                            </connections>
+                        </button>
+                    </items>
+                    <connections>
+                        <outlet property="startButton" destination="McO-Ea-Cuh" id="s8c-Q3-mOg"/>
+                        <outlet property="stopButton" destination="hf2-Tj-cmM" id="0eQ-sB-bBa"/>
+                    </connections>
+                </controller>
+            </objects>
+            <point key="canvasLocation" x="534" y="630"/>
         </scene>
     </scenes>
 </document>

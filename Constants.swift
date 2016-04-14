@@ -14,7 +14,9 @@ enum MessageKey: String {
     case Command        = "command"
     case StateUpdate    = "stateUpdate"
     case Acknowledge    = "ack"
-    case LocationCount  = "locationCount"
+    case Location       = "location"
+    case Longitude      = "longitude"
+    case Latitude       = "latitude"
 }
 
 /// Used by the dicationaries when communicating between the watch and the phone.
