@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D2BE94E38FAFE8BEB26FD4D4 /* Pods_WatchOSMapDemo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 52945ADB8E4CF3644FD4D625 /* Pods_WatchOSMapDemo.framework */; };
 		E07A40BC1CBEC01A0041125F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A40BB1CBEC01A0041125F /* AppDelegate.swift */; };
 		E07A40BE1CBEC01A0041125F /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A40BD1CBEC01A0041125F /* ViewController.swift */; };
 		E07A40C11CBEC01A0041125F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E07A40BF1CBEC01A0041125F /* Main.storyboard */; };
@@ -68,6 +69,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		52945ADB8E4CF3644FD4D625 /* Pods_WatchOSMapDemo.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_WatchOSMapDemo.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		7435BA15DB130D6A975D140A /* Pods-WatchOSMapDemo.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-WatchOSMapDemo.debug.xcconfig"; path = "Pods/Target Support Files/Pods-WatchOSMapDemo/Pods-WatchOSMapDemo.debug.xcconfig"; sourceTree = "<group>"; };
+		AF6475C9C56E2E3A837FCA62 /* Pods-WatchOSMapDemo.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-WatchOSMapDemo.release.xcconfig"; path = "Pods/Target Support Files/Pods-WatchOSMapDemo/Pods-WatchOSMapDemo.release.xcconfig"; sourceTree = "<group>"; };
 		E07A40B81CBEC01A0041125F /* WatchOSMapDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WatchOSMapDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E07A40BB1CBEC01A0041125F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		E07A40BD1CBEC01A0041125F /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
@@ -95,6 +99,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D2BE94E38FAFE8BEB26FD4D4 /* Pods_WatchOSMapDemo.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -108,6 +113,23 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		79DED30BFBE7017EB6F0CB61 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				7435BA15DB130D6A975D140A /* Pods-WatchOSMapDemo.debug.xcconfig */,
+				AF6475C9C56E2E3A837FCA62 /* Pods-WatchOSMapDemo.release.xcconfig */,
+			);
+			name = Pods;
+			sourceTree = "<group>";
+		};
+		815F185418D332A839C78323 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				52945ADB8E4CF3644FD4D625 /* Pods_WatchOSMapDemo.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		E07A40AF1CBEC01A0041125F = {
 			isa = PBXGroup;
 			children = (
@@ -116,6 +138,8 @@
 				E07A40CE1CBEC01A0041125F /* WatchOSMapDemo WatchKit App */,
 				E07A40DD1CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension */,
 				E07A40B91CBEC01A0041125F /* Products */,
+				79DED30BFBE7017EB6F0CB61 /* Pods */,
+				815F185418D332A839C78323 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -181,10 +205,13 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = E07A40EF1CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMapDemo" */;
 			buildPhases = (
+				D8D0E10E3BC9DBE99841A436 /* Check Pods Manifest.lock */,
 				E07A40B41CBEC01A0041125F /* Sources */,
 				E07A40B51CBEC01A0041125F /* Frameworks */,
 				E07A40B61CBEC01A0041125F /* Resources */,
 				E07A40EE1CBEC01A0041125F /* Embed Watch Content */,
+				8E952AF0B15D6A07470298B1 /* Embed Pods Frameworks */,
+				5B82143DE8C3F49813A5F1BC /* Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -305,6 +332,54 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		5B82143DE8C3F49813A5F1BC /* Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Copy Pods Resources";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/Pods/Target Support Files/Pods-WatchOSMapDemo/Pods-WatchOSMapDemo-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		8E952AF0B15D6A07470298B1 /* Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Pods Frameworks";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/Pods/Target Support Files/Pods-WatchOSMapDemo/Pods-WatchOSMapDemo-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		D8D0E10E3BC9DBE99841A436 /* Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Check Pods Manifest.lock";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_ROOT}/../Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [[ $? != 0 ]] ; then\n    cat << EOM\nerror: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\nEOM\n    exit 1\nfi\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		E07A40B41CBEC01A0041125F /* Sources */ = {
@@ -520,6 +595,7 @@
 		};
 		E07A40F01CBEC01A0041125F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7435BA15DB130D6A975D140A /* Pods-WatchOSMapDemo.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -533,6 +609,7 @@
 		};
 		E07A40F11CBEC01A0041125F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AF6475C9C56E2E3A837FCA62 /* Pods-WatchOSMapDemo.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
