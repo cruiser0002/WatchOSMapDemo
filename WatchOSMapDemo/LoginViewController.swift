@@ -22,6 +22,8 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate {
     
     var usersRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com/location/WatchOSMapDemo/users")
     var groupsRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com/location/WatchOSMapDemo/groups")
+    var baseRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com")
+
     
     @IBAction func startPressed(sender: AnyObject) {
         let username = usernameField.text!
@@ -37,6 +39,7 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate {
         
     }
     
+
     
     func loginButton(loginButton: FBSDKLoginButton!, didCompleteWithResult result: FBSDKLoginManagerLoginResult!, error: NSError!)
     {
@@ -59,9 +62,23 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate {
 
     @IBAction func displayStatus(sender: AnyObject) {
         
+        guard let accessToken = FBSDKAccessToken.currentAccessToken() else {
+            return
+        }
         
+        let tokenString = accessToken.tokenString
+
         
+        self.baseRef.authWithOAuthProvider("facebook", token: tokenString,
+            withCompletionBlock: { error, authData in
+                guard error == nil else {
+                    print("Login failed. \(error)")
+                    return
+                    
+                }
+                print("Logged in! \(authData)")
+                
+        })
         
     }
-    
 }
