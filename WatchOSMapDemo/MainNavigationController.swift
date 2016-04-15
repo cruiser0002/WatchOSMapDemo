@@ -130,8 +130,20 @@ class MainNavigationController : UINavigationController, WCSessionDelegate, CLLo
         manager.allowsBackgroundLocationUpdates = false
         
         sessionMessageTimer.invalidate()
+        
+        removePreviousGroups()
     }
     
+    func removePreviousGroups() {
+        
+        guard let userInGroup = self.myUser.userInGroup else {
+            return
+        }
+        
+        userInGroup.removeValue()
+        
+    }
+
     
     
     /**
