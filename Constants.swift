@@ -8,11 +8,16 @@
 
 import Foundation
 
+class ProgramConstants {
+    static let minGroupCharacter = 5
+}
 
 /// Keys used by the dictionaries when communicating between the watch and the phone.
 enum DataKey : String {
     case Longitude      = "longitude"
     case Latitude       = "latitude"
+    case GroupName      = "groupname"
+    case UserName       = "username"
 }
 
 enum MessageKey: String {
