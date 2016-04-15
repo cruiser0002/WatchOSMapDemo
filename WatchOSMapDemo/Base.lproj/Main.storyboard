@@ -1,27 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="9532" systemVersion="15E65" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" initialViewController="Spl-EV-3qr">
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="9532" systemVersion="15E65" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" initialViewController="y08-l0-kAy">
     <dependencies>
         <deployment identifier="iOS"/>
         <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="9530"/>
         <capability name="Constraints to layout margins" minToolsVersion="6.0"/>
     </dependencies>
     <scenes>
-        <!--Main Navigation Controller-->
-        <scene sceneID="QIZ-Rv-PYL">
-            <objects>
-                <navigationController id="Spl-EV-3qr" customClass="MainNavigationController" customModule="WatchOSMapDemo" customModuleProvider="target" sceneMemberID="viewController">
-                    <navigationBar key="navigationBar" contentMode="scaleToFill" id="fK4-Jj-vra">
-                        <rect key="frame" x="0.0" y="0.0" width="320" height="44"/>
-                        <autoresizingMask key="autoresizingMask"/>
-                    </navigationBar>
-                    <connections>
-                        <segue destination="y08-l0-kAy" kind="relationship" relationship="rootViewController" id="esQ-SK-Ly3"/>
-                    </connections>
-                </navigationController>
-                <placeholder placeholderIdentifier="IBFirstResponder" id="xtX-93-40T" userLabel="First Responder" sceneMemberID="firstResponder"/>
-            </objects>
-            <point key="canvasLocation" x="-1193" y="340"/>
-        </scene>
         <!--Login View Controller-->
         <scene sceneID="wzb-fW-DeY">
             <objects>
@@ -34,39 +18,44 @@
                         <rect key="frame" x="0.0" y="0.0" width="600" height="600"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="PqM-fN-6bk">
-                                <rect key="frame" x="177" y="140" width="97" height="30"/>
-                                <state key="normal" title="Start Tracking"/>
-                                <connections>
-                                    <action selector="startPressed:" destination="y08-l0-kAy" eventType="touchUpInside" id="qon-Hd-Dyo"/>
-                                    <segue destination="BYZ-38-t0r" kind="show" id="8oV-Rr-O0I"/>
-                                </connections>
-                            </button>
-                            <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="U3J-2q-I8x" customClass="FBSDKLoginButton">
-                                <rect key="frame" x="27" y="96" width="67" height="30"/>
-                                <state key="normal" title="Facebook"/>
-                            </button>
-                            <textField opaque="NO" clipsSubviews="YES" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="User Name" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="I4t-Lu-Ri3">
-                                <rect key="frame" x="27" y="141" width="93" height="30"/>
+                            <textField opaque="NO" clipsSubviews="YES" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="Group Name" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="kh1-oN-RnT">
+                                <rect key="frame" x="252" y="144" width="97" height="30"/>
                                 <fontDescription key="fontDescription" type="system" pointSize="14"/>
                                 <textInputTraits key="textInputTraits"/>
                             </textField>
-                            <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="NC2-qL-Adf">
-                                <rect key="frame" x="334" y="140" width="46" height="30"/>
+                            <button opaque="NO" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="U3J-2q-I8x" customClass="FBSDKLoginButton">
+                                <rect key="frame" x="267" y="28" width="67" height="30"/>
+                                <state key="normal" title="Facebook"/>
+                            </button>
+                            <textField opaque="NO" clipsSubviews="YES" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="User Name" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="I4t-Lu-Ri3">
+                                <rect key="frame" x="254" y="89" width="93" height="30"/>
+                                <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                <textInputTraits key="textInputTraits"/>
+                            </textField>
+                            <button opaque="NO" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="NC2-qL-Adf">
+                                <rect key="frame" x="277" y="269" width="46" height="30"/>
                                 <state key="normal" title="Status"/>
                                 <connections>
                                     <action selector="displayStatus:" destination="y08-l0-kAy" eventType="touchUpInside" id="hJF-6v-EuO"/>
                                 </connections>
                             </button>
-                            <textField opaque="NO" clipsSubviews="YES" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="Group Name" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="kh1-oN-RnT">
-                                <rect key="frame" x="171" y="96" width="97" height="30"/>
-                                <fontDescription key="fontDescription" type="system" pointSize="14"/>
-                                <textInputTraits key="textInputTraits" autocorrectionType="no" spellCheckingType="no" keyboardType="alphabet"/>
-                            </textField>
+                            <button opaque="NO" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="PqM-fN-6bk">
+                                <rect key="frame" x="252" y="213" width="97" height="30"/>
+                                <state key="normal" title="Start Tracking"/>
+                                <connections>
+                                    <action selector="startPressed:" destination="y08-l0-kAy" eventType="touchUpInside" id="qon-Hd-Dyo"/>
+                                </connections>
+                            </button>
                         </subviews>
                         <color key="backgroundColor" white="1" alpha="1" colorSpace="calibratedWhite"/>
+                        <constraints>
+                            <constraint firstItem="PqM-fN-6bk" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="1Qk-rS-ulh"/>
+                            <constraint firstItem="I4t-Lu-Ri3" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="HTf-rc-LZ3"/>
+                            <constraint firstItem="NC2-qL-Adf" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="Ih8-lA-j4f"/>
+                            <constraint firstItem="U3J-2q-I8x" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="cg9-fq-SbO"/>
+                            <constraint firstItem="kh1-oN-RnT" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="iIF-rI-ugs"/>
+                        </constraints>
                     </view>
-                    <navigationItem key="navigationItem" id="y7D-4b-LWp"/>
                     <connections>
                         <outlet property="facebookLogin" destination="U3J-2q-I8x" id="JVF-Cz-qBA"/>
                         <outlet property="groupnameField" destination="kh1-oN-RnT" id="pB1-Nq-DUu"/>
@@ -91,14 +80,13 @@
                         <rect key="frame" x="0.0" y="0.0" width="600" height="600"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <mapView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" mapType="standard" translatesAutoresizingMaskIntoConstraints="NO" id="zBW-vM-ZaV">
-                                <rect key="frame" x="0.0" y="0.0" width="600" height="600"/>
+                            <mapView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" mapType="standard" translatesAutoresizingMaskIntoConstraints="NO" id="zBW-vM-ZaV">
+                                <rect key="frame" x="0.0" y="0.0" width="600" height="448"/>
                             </mapView>
                         </subviews>
                         <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="calibratedWhite"/>
                         <constraints>
                             <constraint firstItem="zBW-vM-ZaV" firstAttribute="top" secondItem="8bC-Xf-vdC" secondAttribute="topMargin" id="8Nz-fk-AaV"/>
-                            <constraint firstItem="wfy-db-euE" firstAttribute="top" secondItem="zBW-vM-ZaV" secondAttribute="bottom" id="IP5-fF-u0X"/>
                             <constraint firstAttribute="trailingMargin" secondItem="zBW-vM-ZaV" secondAttribute="trailing" constant="-20" id="MFw-hH-uF2"/>
                             <constraint firstItem="zBW-vM-ZaV" firstAttribute="leading" secondItem="8bC-Xf-vdC" secondAttribute="leadingMargin" constant="-20" id="hme-6f-Zp9"/>
                         </constraints>

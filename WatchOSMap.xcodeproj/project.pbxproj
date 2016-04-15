@@ -27,8 +27,6 @@
 		E0D0169E1CC09818002B8BB3 /* LoginViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0D0169D1CC09818002B8BB3 /* LoginViewController.swift */; };
 		E0D016A01CC0ABCD002B8BB3 /* FBSDKLoginKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E0D0169F1CC0ABCD002B8BB3 /* FBSDKLoginKit.framework */; };
 		E0D016A21CC0ACB2002B8BB3 /* FBSDKCoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E0D016A11CC0ACB2002B8BB3 /* FBSDKCoreKit.framework */; };
-		E0D016A41CC0E7C9002B8BB3 /* MainNavigationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0D016A31CC0E7C9002B8BB3 /* MainNavigationController.swift */; };
-		E0D016A61CC15C79002B8BB3 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0D016A51CC15C79002B8BB3 /* User.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -101,8 +99,6 @@
 		E0D0169D1CC09818002B8BB3 /* LoginViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LoginViewController.swift; sourceTree = "<group>"; };
 		E0D0169F1CC0ABCD002B8BB3 /* FBSDKLoginKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = FBSDKLoginKit.framework; sourceTree = "<group>"; };
 		E0D016A11CC0ACB2002B8BB3 /* FBSDKCoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = FBSDKCoreKit.framework; sourceTree = "<group>"; };
-		E0D016A31CC0E7C9002B8BB3 /* MainNavigationController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MainNavigationController.swift; sourceTree = "<group>"; };
-		E0D016A51CC15C79002B8BB3 /* User.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -173,14 +169,12 @@
 			children = (
 				E0C356E71CC03C8400919E87 /* MyPlayground.playground */,
 				E07A40BB1CBEC01A0041125F /* AppDelegate.swift */,
-				E0D016A31CC0E7C9002B8BB3 /* MainNavigationController.swift */,
 				E0D0169D1CC09818002B8BB3 /* LoginViewController.swift */,
 				E07A40BD1CBEC01A0041125F /* ViewController.swift */,
 				E07A40BF1CBEC01A0041125F /* Main.storyboard */,
 				E07A40C21CBEC01A0041125F /* Assets.xcassets */,
 				E07A40C41CBEC01A0041125F /* LaunchScreen.storyboard */,
 				E07A40C71CBEC01A0041125F /* Info.plist */,
-				E0D016A51CC15C79002B8BB3 /* User.swift */,
 			);
 			name = WatchOSMap;
 			path = WatchOSMapDemo;
@@ -408,9 +402,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E0D016A41CC0E7C9002B8BB3 /* MainNavigationController.swift in Sources */,
 				E0D0169E1CC09818002B8BB3 /* LoginViewController.swift in Sources */,
-				E0D016A61CC15C79002B8BB3 /* User.swift in Sources */,
 				E07A40BE1CBEC01A0041125F /* ViewController.swift in Sources */,
 				E07A40BC1CBEC01A0041125F /* AppDelegate.swift in Sources */,
 				E0C355711CBEFFF200919E87 /* Constants.swift in Sources */,
