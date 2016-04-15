@@ -176,7 +176,7 @@ class StreamInterfaceController: WKInterfaceController, WCSessionDelegate, CLLoc
             
             self.map.setRegion(region)
             self.map.removeAllAnnotations()
-            self.map.addAnnotation(self.mapLocation!, withPinColor: .Red)
+            self.map.addAnnotation(self.mapLocation!, withPinColor: .Green)
             
             locations.removeFirst()
 //            print(locations.count)
@@ -189,7 +189,7 @@ class StreamInterfaceController: WKInterfaceController, WCSessionDelegate, CLLoc
                     break
                 }
                 
-                self.map.addAnnotation(CLLocationCoordinate2DMake(lat, long), withPinColor: .Green)
+                self.map.addAnnotation(CLLocationCoordinate2DMake(lat, long), withPinColor: .Red)
             }
             
             

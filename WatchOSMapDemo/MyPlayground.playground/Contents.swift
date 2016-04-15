@@ -16,3 +16,9 @@ let sloc = String(mapLocation)
 //let newLoc = sloc as CLLocationCoordinate2D
 let a = ["v":3, "q":4]
 a["v"]
+
+var list = [3,4]
+list.append(5)
+list += [6,7,8]
+print(list)
+

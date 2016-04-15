@@ -18,8 +18,8 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
     @IBOutlet weak var map: MKMapView!
     var myUser = User.sharedUser()
     
-    var fireRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com/location/WatchOSMapDemo")
     
+    var updateTimer = NSTimer()
     
     /// Location manager used to start and stop updating location.
     var locationManager : CLLocationManager!
@@ -51,8 +51,18 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
         map.mapType = .Standard
         map.userTrackingMode = .Follow
 
+        updateTimer = NSTimer.scheduledTimerWithTimeInterval(5, target: self, selector: "updateBuddies", userInfo: nil, repeats: true)
     }
 
+    func updateBuddies () {
+        let buddies = self.myUser.buddies
+        
+        for index in buddies {
+            
+        }
+        
+    }
+    
     override func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
         // Dispose of any resources that can be recreated.

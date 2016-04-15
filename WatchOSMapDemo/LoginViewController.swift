@@ -21,13 +21,8 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate, UITextFi
     @IBOutlet weak var startButton: UIButton!
     @IBOutlet weak var usernameField: UITextField!
     @IBOutlet weak var groupnameField: UITextField!
-    @IBOutlet weak var facebookLogin: FBSDKLoginButton!
     
-    var usersRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com/location/WatchOSMapDemo/users")
-    var groupsRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com/location/WatchOSMapDemo/groups")
-    var baseRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com")
-
-    var uid : String = ""
+    @IBOutlet weak var facebookLogin: FBSDKLoginButton!
     
     var myUser = User.sharedUser()
     
@@ -37,6 +32,8 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate, UITextFi
         self.groupnameField.enabled = false
         self.groupnameField.delegate = self
         self.startButton.enabled = false
+        
+        self.facebookLogin.delegate = self
         
         manageLogin()
         
@@ -68,8 +65,7 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate, UITextFi
         
         let tokenString = accessToken.tokenString
         
-        
-        self.baseRef.authWithOAuthProvider("facebook", token: tokenString,
+        User.baseRef.authWithOAuthProvider("facebook", token: tokenString,
             withCompletionBlock: { error, authData in
                 guard error == nil else {
                     print("Login failed. \(error)")
@@ -82,77 +78,70 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate, UITextFi
                     self.groupnameField.enabled = true
                 }
                 
+                self.myUser.uid = String(authData.uid)
                 
-                self.uid = String(authData.uid)
+                guard (self.myUser.userRef != nil) else {
+                    return
+                }
                 
-                let userGroupRef = self.usersRef.childByAppendingPath(self.uid)
-                
-                userGroupRef.observeSingleEventOfType(.Value, withBlock: { snapshot in
+                self.myUser.userRef!.observeSingleEventOfType(.Value, withBlock: { snapshot in
                     if snapshot.value is NSNull {
                         return
                     }
-                    guard let groupName = snapshot.value["groupname"] as? String else {
+                    guard let groupName = snapshot.value as? String else {
                         return
                     }
                     
                     guard groupName != "" else {
                         return
                     }
-                    self.groupnameField.text = groupName
+                    
+                    self.myUser.groupname = groupName
+                    dispatch_async(dispatch_get_main_queue()) {
+                        self.groupnameField.text = groupName
+                        if(self.groupnameField.text?.characters.count >= ProgramConstants.minGroupCharacter) {
+                            self.startButton.enabled = true
+                        }
+                    }
+                    
                 })
         })
     }
     
     func removePreviousGroups(completion: () -> Void) {
         
-        guard self.uid != "" else{
+//        guard let userRef = self.myUser.userRef else {
+//            completion()
+//            return
+//        }
+        
+        guard let userInGroup = self.myUser.userInGroup else {
+            completion()
             return
         }
         
-        let userGroupRef = self.usersRef.childByAppendingPath(self.uid)
+        userInGroup.removeValue()
         
-        userGroupRef.observeSingleEventOfType(.Value, withBlock: { snapshot in
-            if snapshot.value is NSNull {
-                completion()
-                return
-            }
-            guard let groupName = snapshot.value["groupname"] as? String else {
-                completion()
-                return
-            }
-            
-            print(groupName)
-            guard groupName != "" else {
-                completion()
-                return
-            }
-            
-            let groupUserRef = self.groupsRef.childByAppendingPath(groupName)
-            
-            print(groupUserRef.description)
-            groupUserRef.removeValue()
-            
-            userGroupRef.removeValue()
-            
-            completion()
-        })
+//        userRef.setValue("")
+//        self.myUser.groupname = nil
         
+        completion()
         
         
     }
     
     @IBAction func startPressed(sender: AnyObject) {
         removePreviousGroups { () -> Void in
-            let username = self.uid
+
             let groupname = self.groupnameField.text!
             
-            let userRef = self.usersRef.childByAppendingPath(username)
-            let group = ["groupname": groupname]
+            guard let userRef = self.myUser.userRef else {
+                return
+            }
             
-            userRef.updateChildValues(group)
+            userRef.setValue(groupname)
+            self.myUser.groupname = groupname
             
-            let groupRef = self.groupsRef.childByAppendingPath(groupname)
-            groupRef.updateChildValues(["username": username])
         }
         
         
@@ -174,6 +163,10 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate, UITextFi
         loginManager.logOut()
         self.groupnameField.enabled = false
         self.startButton.enabled = false
+        
+        removePreviousGroups { () -> Void in
+            return
+        }
     }
     
     func loginButtonWillLogin(loginButton: FBSDKLoginButton!) -> Bool {

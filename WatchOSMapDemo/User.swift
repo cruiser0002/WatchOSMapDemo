@@ -18,6 +18,30 @@ class User {
     var isLoggedIn : Bool = false
     var buddies = [[String : AnyObject]]()
     
+    func myselfAndBuddies (nearest : Int?) -> [[String : AnyObject]] {
+        var list = [[String : AnyObject]]()
+        guard self.location != nil else {
+            return list
+        }
+        list.append(self.location!)
+        guard nearest != nil && nearest > 0 && nearest >= buddies.count else {
+            return list+buddies
+        }
+//        let strings = numbers.map {
+//            (number) -> String in
+//            var number = number
+//            var output = ""
+//            while number > 0 {
+//                output = digitNames[number % 10]! + output
+//                number /= 10
+//            }
+//            return output
+//        }
+       
+        return list+buddies[0...nearest!-1]
+        
+    }
+    
     func updateBuddies () {
         guard groupRef != nil else {
             return
@@ -54,6 +78,20 @@ class User {
             return nil
         }
         return User.groupsRef.childByAppendingPath(groupname)
+    }
+    
+
+    var userInGroup : Firebase? {
+        guard groupname != nil && groupname != "" else {
+            return nil
+        }
+        guard uid != nil && uid != "" else {
+            return nil
+        }
+        guard groupRef != nil else {
+            return nil
+        }
+        return groupRef!.childByAppendingPath(uid)
     }
     
     var userRef : Firebase? {

@@ -80,7 +80,7 @@ class MainNavigationController : UINavigationController, WCSessionDelegate, CLLo
                         return
                     }
                     
-                    guard let groupName = snapshot.value["groupname"] as? String else {
+                    guard let groupName = snapshot.value as? String else {
                         return
                     }
                     
@@ -193,7 +193,7 @@ class MainNavigationController : UINavigationController, WCSessionDelegate, CLLo
         do {
             try session.updateApplicationContext([
                 MessageKey.StateUpdate.rawValue: isUpdatingLocation,
-                MessageKey.Location.rawValue: self.myUser.buddies
+                MessageKey.Location.rawValue: self.myUser.myselfAndBuddies(nil)
                 ])
             
         }
