@@ -160,8 +160,8 @@ class StreamInterfaceController: WKInterfaceController, WCSessionDelegate, CLLoc
             }
 //            print(location[MessageKey.Longitude.rawValue])
             
-            guard let lat = location[MessageKey.Latitude.rawValue] as? CLLocationDegrees,
-            let long = location[MessageKey.Longitude.rawValue] as? CLLocationDegrees else
+            guard let lat = location[DataKey.Latitude.rawValue] as? CLLocationDegrees,
+            let long = location[DataKey.Longitude.rawValue] as? CLLocationDegrees else
             {
                 return
             }

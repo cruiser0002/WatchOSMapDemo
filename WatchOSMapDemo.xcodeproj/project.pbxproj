@@ -92,6 +92,7 @@
 		E0C355701CBEFFF200919E87 /* Constants.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		E0C3569E1CBF0DA900919E87 /* StreamInterfaceController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = StreamInterfaceController.swift; sourceTree = "<group>"; };
 		E0C356E71CC03C8400919E87 /* MyPlayground.playground */ = {isa = PBXFileReference; lastKnownFileType = file.playground; path = MyPlayground.playground; sourceTree = "<group>"; };
+		E0D0169A1CC06B9B002B8BB3 /* WatchOSMapDemo-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "WatchOSMapDemo-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -194,6 +195,7 @@
 			isa = PBXGroup;
 			children = (
 				E0C355701CBEFFF200919E87 /* Constants.swift */,
+				E0D0169A1CC06B9B002B8BB3 /* WatchOSMapDemo-Bridging-Header.h */,
 			);
 			name = Common;
 			sourceTree = "<group>";
@@ -603,6 +605,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.udacity.WatchOSMapDemo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "WatchOSMapDemo-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
@@ -617,6 +620,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.udacity.WatchOSMapDemo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "WatchOSMapDemo-Bridging-Header.h";
 			};
 			name = Release;
 		};

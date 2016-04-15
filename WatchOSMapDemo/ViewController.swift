@@ -7,12 +7,15 @@
 //
 
 import UIKit
+import MapKit
 import WatchConnectivity
 import CoreLocation
 
 class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDelegate {
 
-    @IBOutlet weak var label: UILabel!
+//    @IBOutlet weak var label: UILabel!
+    @IBOutlet weak var map: MKMapView!
+    @IBOutlet weak var textView: UITextView!
     
     /// Default WatchConnectivity session for communicating with the watch.
     let session = WCSession.defaultSession()
@@ -41,11 +44,10 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
         session.activateSession()
         
         manager.delegate = self
-        
-//        manager.allowsBackgroundLocationUpdates = true
-        
-        startUpdatingLocationAllowingBackground()
-        
+       
+//        startUpdatingLocationAllowingBackground()
+        manager.requestWhenInUseAuthorization()
+        manager.requestAlwaysAuthorization()
     }
 
     override func didReceiveMemoryWarning() {
@@ -126,7 +128,7 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
         }
         
         dispatch_async(dispatch_get_main_queue()) {
-            self.label.text = messageCommandString
+//            self.label.text = messageCommandString
             
             switch messageCommand {
             case .StartUpdatingLocation:
@@ -167,6 +169,12 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
         catch let error as NSError {
             print("Error when updating application context \(error).")
         }
+        
+//        let annotation = MKPointAnnotation()
+//        annotation.coordinate = 
+        
+        
+        
     }
     
     /**
@@ -181,7 +189,7 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
         let lat = currentLocation.coordinate.latitude as Double
         let long = currentLocation.coordinate.longitude as Double
         
-        self.myLocation = [MessageKey.Latitude.rawValue: lat, MessageKey.Longitude.rawValue : long]
+        self.myLocation = [DataKey.Latitude.rawValue: lat, DataKey.Longitude.rawValue : long]
         
     }
     

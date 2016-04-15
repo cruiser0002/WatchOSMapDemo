@@ -10,13 +10,16 @@ import Foundation
 
 
 /// Keys used by the dictionaries when communicating between the watch and the phone.
+enum DataKey : String {
+    case Longitude      = "longitude"
+    case Latitude       = "latitude"
+}
+
 enum MessageKey: String {
     case Command        = "command"
     case StateUpdate    = "stateUpdate"
     case Acknowledge    = "ack"
     case Location       = "location"
-    case Longitude      = "longitude"
-    case Latitude       = "latitude"
 }
 
 /// Used by the dicationaries when communicating between the watch and the phone.
