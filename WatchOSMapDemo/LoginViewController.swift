@@ -8,6 +8,9 @@
 
 import Foundation
 import UIKit
+import MapKit
+import WatchConnectivity
+import CoreLocation
 import FBSDKCoreKit
 import FBSDKLoginKit
 
@@ -24,9 +27,48 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate {
     var groupsRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com/location/WatchOSMapDemo/groups")
     var baseRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com")
 
+    var uid : String = ""
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        self.groupnameField.enabled = false
+        self.startButton.enabled = false
+        
+        manageLogin()
+    }
+    
+    func manageLogin() {
+        guard let accessToken = FBSDKAccessToken.currentAccessToken() else {
+            return
+        }
+        
+        let tokenString = accessToken.tokenString
+        
+        
+        self.baseRef.authWithOAuthProvider("facebook", token: tokenString,
+            withCompletionBlock: { error, authData in
+                guard error == nil else {
+                    print("Login failed. \(error)")
+                    return
+                    
+                }
+                print("Logged in! \(authData.uid)")
+                
+                dispatch_async(dispatch_get_main_queue()) {
+                    self.groupnameField.enabled = true
+                }
+                
+                
+                self.uid = String(authData.uid)
+                return
+        })
+
+    }
     
     @IBAction func startPressed(sender: AnyObject) {
-        let username = usernameField.text!
+        
+        let username = self.uid
         let groupname = groupnameField.text!
         
         let userRef = usersRef.childByAppendingPath(username)
@@ -44,7 +86,7 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate {
     func loginButton(loginButton: FBSDKLoginButton!, didCompleteWithResult result: FBSDKLoginManagerLoginResult!, error: NSError!)
     {
         print("loginButton")
-        
+        manageLogin()
     }
     
     func loginButtonDidLogOut(loginButton: FBSDKLoginButton!)
@@ -52,7 +94,8 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate {
         print("loginButtonDidLogOut")
         let loginManager: FBSDKLoginManager = FBSDKLoginManager()
         loginManager.logOut()
-        
+        self.groupnameField.enabled = false
+        self.startButton.enabled = false
     }
     
     func loginButtonWillLogin(loginButton: FBSDKLoginButton!) -> Bool {
@@ -61,24 +104,6 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate {
     }
 
     @IBAction func displayStatus(sender: AnyObject) {
-        
-        guard let accessToken = FBSDKAccessToken.currentAccessToken() else {
-            return
-        }
-        
-        let tokenString = accessToken.tokenString
-
-        
-        self.baseRef.authWithOAuthProvider("facebook", token: tokenString,
-            withCompletionBlock: { error, authData in
-                guard error == nil else {
-                    print("Login failed. \(error)")
-                    return
-                    
-                }
-                print("Logged in! \(authData)")
-                
-        })
-        
+        manageLogin()
     }
 }
