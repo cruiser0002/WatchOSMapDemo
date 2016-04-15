@@ -39,7 +39,7 @@
                                 <action selector="changeMapRegion:" destination="AgC-eL-Hgc" id="0jg-jz-ByJ"/>
                             </connections>
                         </slider>
-                        <map height="1" alignment="left" id="uDb-V8-tEy"/>
+                        <map height="1" alignment="left" enabled="NO" id="uDb-V8-tEy"/>
                     </items>
                     <connections>
                         <outlet property="map" destination="uDb-V8-tEy" id="qYB-1o-RdD"/>
@@ -59,7 +59,7 @@
                                 <action selector="changeMapRegion:" destination="9uF-8x-3Uu" id="Gsh-Kc-CYf"/>
                             </connections>
                         </slider>
-                        <map height="1" alignment="left" id="jHI-dk-fXv"/>
+                        <map height="1" alignment="left" enabled="NO" id="jHI-dk-fXv"/>
                     </items>
                     <connections>
                         <outlet property="map" destination="jHI-dk-fXv" id="OCY-OL-Tf3"/>
