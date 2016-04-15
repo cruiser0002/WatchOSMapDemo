@@ -13,10 +13,10 @@
 		E07A40C11CBEC01A0041125F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E07A40BF1CBEC01A0041125F /* Main.storyboard */; };
 		E07A40C31CBEC01A0041125F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E07A40C21CBEC01A0041125F /* Assets.xcassets */; };
 		E07A40C61CBEC01A0041125F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E07A40C41CBEC01A0041125F /* LaunchScreen.storyboard */; };
-		E07A40CB1CBEC01A0041125F /* WatchOSMapDemo WatchKit App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = E07A40CA1CBEC01A0041125F /* WatchOSMapDemo WatchKit App.app */; };
+		E07A40CB1CBEC01A0041125F /* WatchOSMap.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = E07A40CA1CBEC01A0041125F /* WatchOSMap.app */; };
 		E07A40D11CBEC01A0041125F /* Interface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E07A40CF1CBEC01A0041125F /* Interface.storyboard */; };
 		E07A40D31CBEC01A0041125F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E07A40D21CBEC01A0041125F /* Assets.xcassets */; };
-		E07A40DA1CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E07A40D91CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E07A40DA1CBEC01A0041125F /* WatchOSMap.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E07A40D91CBEC01A0041125F /* WatchOSMap.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E07A40DF1CBEC01A0041125F /* NativeInterfaceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A40DE1CBEC01A0041125F /* NativeInterfaceController.swift */; };
 		E07A40E11CBEC01A0041125F /* ExtensionDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A40E01CBEC01A0041125F /* ExtensionDelegate.swift */; };
 		E07A40E31CBEC01A0041125F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E07A40E21CBEC01A0041125F /* Assets.xcassets */; };
@@ -55,7 +55,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				E07A40DA1CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension.appex in Embed App Extensions */,
+				E07A40DA1CBEC01A0041125F /* WatchOSMap.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -66,7 +66,7 @@
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
-				E07A40CB1CBEC01A0041125F /* WatchOSMapDemo WatchKit App.app in Embed Watch Content */,
+				E07A40CB1CBEC01A0041125F /* WatchOSMap.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -77,18 +77,18 @@
 		7435BA15DB130D6A975D140A /* Pods-WatchOSMapDemo.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-WatchOSMapDemo.debug.xcconfig"; path = "Pods/Target Support Files/Pods-WatchOSMapDemo/Pods-WatchOSMapDemo.debug.xcconfig"; sourceTree = "<group>"; };
 		86B945F22160A579FB34F110 /* libPods-WatchOSMapDemo.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-WatchOSMapDemo.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF6475C9C56E2E3A837FCA62 /* Pods-WatchOSMapDemo.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-WatchOSMapDemo.release.xcconfig"; path = "Pods/Target Support Files/Pods-WatchOSMapDemo/Pods-WatchOSMapDemo.release.xcconfig"; sourceTree = "<group>"; };
-		E07A40B81CBEC01A0041125F /* WatchOSMapDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WatchOSMapDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E07A40B81CBEC01A0041125F /* WatchOSMap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WatchOSMap.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E07A40BB1CBEC01A0041125F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		E07A40BD1CBEC01A0041125F /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		E07A40C01CBEC01A0041125F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		E07A40C21CBEC01A0041125F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E07A40C51CBEC01A0041125F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		E07A40C71CBEC01A0041125F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		E07A40CA1CBEC01A0041125F /* WatchOSMapDemo WatchKit App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "WatchOSMapDemo WatchKit App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E07A40CA1CBEC01A0041125F /* WatchOSMap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WatchOSMap.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E07A40D01CBEC01A0041125F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Interface.storyboard; sourceTree = "<group>"; };
 		E07A40D21CBEC01A0041125F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E07A40D41CBEC01A0041125F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		E07A40D91CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "WatchOSMapDemo WatchKit Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E07A40D91CBEC01A0041125F /* WatchOSMap.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WatchOSMap.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E07A40DE1CBEC01A0041125F /* NativeInterfaceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeInterfaceController.swift; sourceTree = "<group>"; };
 		E07A40E01CBEC01A0041125F /* ExtensionDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionDelegate.swift; sourceTree = "<group>"; };
 		E07A40E21CBEC01A0041125F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -149,9 +149,9 @@
 			isa = PBXGroup;
 			children = (
 				E0C355731CBEFFF800919E87 /* Common */,
-				E07A40BA1CBEC01A0041125F /* WatchOSMapDemo */,
-				E07A40CE1CBEC01A0041125F /* WatchOSMapDemo WatchKit App */,
-				E07A40DD1CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension */,
+				E07A40BA1CBEC01A0041125F /* WatchOSMap */,
+				E07A40CE1CBEC01A0041125F /* WatchOSMap WatchKit App */,
+				E07A40DD1CBEC01A0041125F /* WatchOSMap WatchKit Extension */,
 				E07A40B91CBEC01A0041125F /* Products */,
 				79DED30BFBE7017EB6F0CB61 /* Pods */,
 				815F185418D332A839C78323 /* Frameworks */,
@@ -161,14 +161,14 @@
 		E07A40B91CBEC01A0041125F /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				E07A40B81CBEC01A0041125F /* WatchOSMapDemo.app */,
-				E07A40CA1CBEC01A0041125F /* WatchOSMapDemo WatchKit App.app */,
-				E07A40D91CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension.appex */,
+				E07A40B81CBEC01A0041125F /* WatchOSMap.app */,
+				E07A40CA1CBEC01A0041125F /* WatchOSMap.app */,
+				E07A40D91CBEC01A0041125F /* WatchOSMap.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		E07A40BA1CBEC01A0041125F /* WatchOSMapDemo */ = {
+		E07A40BA1CBEC01A0041125F /* WatchOSMap */ = {
 			isa = PBXGroup;
 			children = (
 				E0C356E71CC03C8400919E87 /* MyPlayground.playground */,
@@ -182,20 +182,22 @@
 				E07A40C71CBEC01A0041125F /* Info.plist */,
 				E0D016A51CC15C79002B8BB3 /* User.swift */,
 			);
+			name = WatchOSMap;
 			path = WatchOSMapDemo;
 			sourceTree = "<group>";
 		};
-		E07A40CE1CBEC01A0041125F /* WatchOSMapDemo WatchKit App */ = {
+		E07A40CE1CBEC01A0041125F /* WatchOSMap WatchKit App */ = {
 			isa = PBXGroup;
 			children = (
 				E07A40CF1CBEC01A0041125F /* Interface.storyboard */,
 				E07A40D21CBEC01A0041125F /* Assets.xcassets */,
 				E07A40D41CBEC01A0041125F /* Info.plist */,
 			);
+			name = "WatchOSMap WatchKit App";
 			path = "WatchOSMapDemo WatchKit App";
 			sourceTree = "<group>";
 		};
-		E07A40DD1CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension */ = {
+		E07A40DD1CBEC01A0041125F /* WatchOSMap WatchKit Extension */ = {
 			isa = PBXGroup;
 			children = (
 				E0C3556E1CBEFC3600919E87 /* MainInterfaceController.swift */,
@@ -205,6 +207,7 @@
 				E07A40E21CBEC01A0041125F /* Assets.xcassets */,
 				E07A40E41CBEC01A0041125F /* Info.plist */,
 			);
+			name = "WatchOSMap WatchKit Extension";
 			path = "WatchOSMapDemo WatchKit Extension";
 			sourceTree = "<group>";
 		};
@@ -220,9 +223,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		E07A40B71CBEC01A0041125F /* WatchOSMapDemo */ = {
+		E07A40B71CBEC01A0041125F /* WatchOSMap */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E07A40EF1CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMapDemo" */;
+			buildConfigurationList = E07A40EF1CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMap" */;
 			buildPhases = (
 				D8D0E10E3BC9DBE99841A436 /* Check Pods Manifest.lock */,
 				E07A40B41CBEC01A0041125F /* Sources */,
@@ -237,14 +240,14 @@
 			dependencies = (
 				E07A40CD1CBEC01A0041125F /* PBXTargetDependency */,
 			);
-			name = WatchOSMapDemo;
+			name = WatchOSMap;
 			productName = WatchOSMapDemo;
-			productReference = E07A40B81CBEC01A0041125F /* WatchOSMapDemo.app */;
+			productReference = E07A40B81CBEC01A0041125F /* WatchOSMap.app */;
 			productType = "com.apple.product-type.application";
 		};
-		E07A40C91CBEC01A0041125F /* WatchOSMapDemo WatchKit App */ = {
+		E07A40C91CBEC01A0041125F /* WatchOSMap WatchKit App */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E07A40EB1CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMapDemo WatchKit App" */;
+			buildConfigurationList = E07A40EB1CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMap WatchKit App" */;
 			buildPhases = (
 				E07A40C81CBEC01A0041125F /* Resources */,
 				E07A40EA1CBEC01A0041125F /* Embed App Extensions */,
@@ -254,14 +257,14 @@
 			dependencies = (
 				E07A40DC1CBEC01A0041125F /* PBXTargetDependency */,
 			);
-			name = "WatchOSMapDemo WatchKit App";
+			name = "WatchOSMap WatchKit App";
 			productName = "WatchOSMapDemo WatchKit App";
-			productReference = E07A40CA1CBEC01A0041125F /* WatchOSMapDemo WatchKit App.app */;
+			productReference = E07A40CA1CBEC01A0041125F /* WatchOSMap.app */;
 			productType = "com.apple.product-type.application.watchapp2";
 		};
-		E07A40D81CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension */ = {
+		E07A40D81CBEC01A0041125F /* WatchOSMap WatchKit Extension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E07A40E71CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMapDemo WatchKit Extension" */;
+			buildConfigurationList = E07A40E71CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMap WatchKit Extension" */;
 			buildPhases = (
 				E07A40D51CBEC01A0041125F /* Sources */,
 				E07A40D61CBEC01A0041125F /* Frameworks */,
@@ -271,9 +274,9 @@
 			);
 			dependencies = (
 			);
-			name = "WatchOSMapDemo WatchKit Extension";
+			name = "WatchOSMap WatchKit Extension";
 			productName = "WatchOSMapDemo WatchKit Extension";
-			productReference = E07A40D91CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension.appex */;
+			productReference = E07A40D91CBEC01A0041125F /* WatchOSMap.appex */;
 			productType = "com.apple.product-type.watchkit2-extension";
 		};
 /* End PBXNativeTarget section */
@@ -302,7 +305,7 @@
 					};
 				};
 			};
-			buildConfigurationList = E07A40B31CBEC01A0041125F /* Build configuration list for PBXProject "WatchOSMapDemo" */;
+			buildConfigurationList = E07A40B31CBEC01A0041125F /* Build configuration list for PBXProject "WatchOSMap" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = English;
 			hasScannedForEncodings = 0;
@@ -315,9 +318,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				E07A40B71CBEC01A0041125F /* WatchOSMapDemo */,
-				E07A40C91CBEC01A0041125F /* WatchOSMapDemo WatchKit App */,
-				E07A40D81CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension */,
+				E07A40B71CBEC01A0041125F /* WatchOSMap */,
+				E07A40C91CBEC01A0041125F /* WatchOSMap WatchKit App */,
+				E07A40D81CBEC01A0041125F /* WatchOSMap WatchKit Extension */,
 			);
 		};
 /* End PBXProject section */
@@ -431,12 +434,12 @@
 /* Begin PBXTargetDependency section */
 		E07A40CD1CBEC01A0041125F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = E07A40C91CBEC01A0041125F /* WatchOSMapDemo WatchKit App */;
+			target = E07A40C91CBEC01A0041125F /* WatchOSMap WatchKit App */;
 			targetProxy = E07A40CC1CBEC01A0041125F /* PBXContainerItemProxy */;
 		};
 		E07A40DC1CBEC01A0041125F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = E07A40D81CBEC01A0041125F /* WatchOSMapDemo WatchKit Extension */;
+			target = E07A40D81CBEC01A0041125F /* WatchOSMap WatchKit Extension */;
 			targetProxy = E07A40DB1CBEC01A0041125F /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -556,10 +559,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
-				INFOPLIST_FILE = "WatchOSMapDemo WatchKit Extension/Info.plist";
+				INFOPLIST_FILE = "WatchOSMap WatchKit Extension/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.udacity.WatchOSMapDemo.watchkitapp.watchkitextension;
-				PRODUCT_NAME = "${TARGET_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = com.udacity.WatchOSMap.watchkitapp.watchkitextension;
+				PRODUCT_NAME = WatchOSMap;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -572,10 +575,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
-				INFOPLIST_FILE = "WatchOSMapDemo WatchKit Extension/Info.plist";
+				INFOPLIST_FILE = "WatchOSMap WatchKit Extension/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.udacity.WatchOSMapDemo.watchkitapp.watchkitextension;
-				PRODUCT_NAME = "${TARGET_NAME}";
+				PRODUCT_BUNDLE_IDENTIFIER = com.udacity.WatchOSMap.watchkitapp.watchkitextension;
+				PRODUCT_NAME = WatchOSMap;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
@@ -589,9 +592,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				EMBEDDED_CONTENT_CONTAINS_SWIFT = YES;
 				IBSC_MODULE = WatchOSMapDemo_WatchKit_Extension;
-				INFOPLIST_FILE = "WatchOSMapDemo WatchKit App/Info.plist";
-				PRODUCT_BUNDLE_IDENTIFIER = com.udacity.WatchOSMapDemo.watchkitapp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = "WatchOSMap WatchKit App/Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = com.udacity.WatchOSMap.watchkitapp;
+				PRODUCT_NAME = WatchOSMap;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
@@ -605,9 +608,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				EMBEDDED_CONTENT_CONTAINS_SWIFT = YES;
 				IBSC_MODULE = WatchOSMapDemo_WatchKit_Extension;
-				INFOPLIST_FILE = "WatchOSMapDemo WatchKit App/Info.plist";
-				PRODUCT_BUNDLE_IDENTIFIER = com.udacity.WatchOSMapDemo.watchkitapp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = "WatchOSMap WatchKit App/Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = com.udacity.WatchOSMap.watchkitapp;
+				PRODUCT_NAME = WatchOSMap;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
@@ -625,10 +628,10 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)",
 				);
-				INFOPLIST_FILE = WatchOSMapDemo/Info.plist;
+				INFOPLIST_FILE = WatchOSMap/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.udacity.WatchOSMapDemo;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = WatchOSMap;
 				SWIFT_OBJC_BRIDGING_HEADER = "WatchOSMapDemo-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -644,10 +647,10 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)",
 				);
-				INFOPLIST_FILE = WatchOSMapDemo/Info.plist;
+				INFOPLIST_FILE = WatchOSMap/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.udacity.WatchOSMapDemo;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = WatchOSMap;
 				SWIFT_OBJC_BRIDGING_HEADER = "WatchOSMapDemo-Bridging-Header.h";
 			};
 			name = Release;
@@ -655,7 +658,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		E07A40B31CBEC01A0041125F /* Build configuration list for PBXProject "WatchOSMapDemo" */ = {
+		E07A40B31CBEC01A0041125F /* Build configuration list for PBXProject "WatchOSMap" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E07A40E51CBEC01A0041125F /* Debug */,
@@ -664,7 +667,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E07A40E71CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMapDemo WatchKit Extension" */ = {
+		E07A40E71CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMap WatchKit Extension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E07A40E81CBEC01A0041125F /* Debug */,
@@ -673,7 +676,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E07A40EB1CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMapDemo WatchKit App" */ = {
+		E07A40EB1CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMap WatchKit App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E07A40EC1CBEC01A0041125F /* Debug */,
@@ -682,7 +685,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E07A40EF1CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMapDemo" */ = {
+		E07A40EF1CBEC01A0041125F /* Build configuration list for PBXNativeTarget "WatchOSMap" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E07A40F01CBEC01A0041125F /* Debug */,
