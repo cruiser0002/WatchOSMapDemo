@@ -15,7 +15,7 @@ import FBSDKCoreKit
 import FBSDKLoginKit
 
 
-class LoginViewController : UIViewController, FBSDKLoginButtonDelegate {
+class LoginViewController : UIViewController, FBSDKLoginButtonDelegate, UITextFieldDelegate{
     
     @IBOutlet weak var statusButton: UIButton!
     @IBOutlet weak var startButton: UIButton!
@@ -29,13 +29,36 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate {
 
     var uid : String = ""
     
+    var myUser = User.sharedUser()
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
         self.groupnameField.enabled = false
+        self.groupnameField.delegate = self
         self.startButton.enabled = false
         
         manageLogin()
+        
+        if(self.groupnameField.text?.characters.count >= ProgramConstants.minGroupCharacter) {
+            self.startButton.enabled = true
+        }
+    }
+    
+    
+    func textField(textField: UITextField, shouldChangeCharactersInRange range: NSRange, replacementString string: String) -> Bool {
+        
+        let text = "\(self.groupnameField.text!)\(string)"
+        print("\(text):\(string)")
+        
+        if(text.characters.count >= ProgramConstants.minGroupCharacter) {
+            self.startButton.enabled = true
+        }
+        else {
+            self.startButton.enabled = false
+        }
+        
+        return true
     }
     
     func manageLogin() {
@@ -61,24 +84,79 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate {
                 
                 
                 self.uid = String(authData.uid)
-                return
+                
+                let userGroupRef = self.usersRef.childByAppendingPath(self.uid)
+                
+                userGroupRef.observeSingleEventOfType(.Value, withBlock: { snapshot in
+                    if snapshot.value is NSNull {
+                        return
+                    }
+                    guard let groupName = snapshot.value["groupname"] as? String else {
+                        return
+                    }
+                    
+                    guard groupName != "" else {
+                        return
+                    }
+                    self.groupnameField.text = groupName
+                })
         })
-
+    }
+    
+    func removePreviousGroups(completion: () -> Void) {
+        
+        guard self.uid != "" else{
+            return
+        }
+        
+        let userGroupRef = self.usersRef.childByAppendingPath(self.uid)
+        
+        userGroupRef.observeSingleEventOfType(.Value, withBlock: { snapshot in
+            if snapshot.value is NSNull {
+                completion()
+                return
+            }
+            guard let groupName = snapshot.value["groupname"] as? String else {
+                completion()
+                return
+            }
+            
+            print(groupName)
+            guard groupName != "" else {
+                completion()
+                return
+            }
+            
+            let groupUserRef = self.groupsRef.childByAppendingPath(groupName)
+            
+            print(groupUserRef.description)
+            groupUserRef.removeValue()
+            
+            userGroupRef.removeValue()
+            
+            completion()
+        })
+        
+        
+        
     }
     
     @IBAction func startPressed(sender: AnyObject) {
+        removePreviousGroups { () -> Void in
+            let username = self.uid
+            let groupname = self.groupnameField.text!
+            
+            let userRef = self.usersRef.childByAppendingPath(username)
+            let group = ["groupname": groupname]
+            
+            userRef.updateChildValues(group)
+            
+            let groupRef = self.groupsRef.childByAppendingPath(groupname)
+            groupRef.updateChildValues(["username": username])
+        }
         
-        let username = self.uid
-        let groupname = groupnameField.text!
         
-        let userRef = usersRef.childByAppendingPath(username)
-        let group = ["groupname": groupname]
-        
-        userRef.updateChildValues(group)
-        
-        let groupRef = groupsRef.childByAppendingPath(groupname)
-        groupRef.updateChildValues(["username": username])
-        
+        //TODO: should turn start button into stop button
     }
     
 
