@@ -28,7 +28,7 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
 	<key>WKCompanionAppBundleIdentifier</key>
-	<string>com.udacity.WatchOSMap</string>
+	<string>com.udacity.WatchOSMapDemo</string>
 	<key>WKWatchKitApp</key>
 	<true/>
 </dict>
