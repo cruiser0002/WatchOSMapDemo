@@ -176,11 +176,11 @@
 				E0D016A31CC0E7C9002B8BB3 /* MainNavigationController.swift */,
 				E0D0169D1CC09818002B8BB3 /* LoginViewController.swift */,
 				E07A40BD1CBEC01A0041125F /* ViewController.swift */,
+				E0D016A51CC15C79002B8BB3 /* User.swift */,
 				E07A40BF1CBEC01A0041125F /* Main.storyboard */,
 				E07A40C21CBEC01A0041125F /* Assets.xcassets */,
 				E07A40C41CBEC01A0041125F /* LaunchScreen.storyboard */,
 				E07A40C71CBEC01A0041125F /* Info.plist */,
-				E0D016A51CC15C79002B8BB3 /* User.swift */,
 			);
 			path = WatchOSMapDemo;
 			sourceTree = "<group>";

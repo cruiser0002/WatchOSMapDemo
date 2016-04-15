@@ -15,6 +15,11 @@
                                 <segue destination="AgC-eL-Hgc" kind="push" id="3Sy-iM-HWl"/>
                             </connections>
                         </button>
+                        <button width="1" alignment="left" title="Menu" id="XTu-LZ-kcj">
+                            <connections>
+                                <segue destination="AaT-ee-1mH" kind="push" id="Dhq-oL-a7g"/>
+                            </connections>
+                        </button>
                         <button width="1" alignment="left" verticalAlignment="bottom" title="Stream" id="gGD-Y7-yx8">
                             <connections>
                                 <segue destination="9uF-8x-3Uu" kind="push" id="mFn-dN-Zbq"/>
@@ -48,6 +53,19 @@
                 </controller>
             </objects>
             <point key="canvasLocation" x="533" y="344.5"/>
+        </scene>
+        <!--Interface Controller-->
+        <scene sceneID="Fpa-da-tyQ">
+            <objects>
+                <controller id="AaT-ee-1mH">
+                    <menu key="menu" id="5Qq-wH-N8R">
+                        <items>
+                            <menuItem title="Menu Item" id="AbH-Td-lwU"/>
+                        </items>
+                    </menu>
+                </controller>
+            </objects>
+            <point key="canvasLocation" x="271" y="794"/>
         </scene>
         <!--StreamInterfaceController-->
         <scene sceneID="jvr-pA-Vuu">

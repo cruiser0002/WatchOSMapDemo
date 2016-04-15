@@ -10,7 +10,8 @@ import UIKit
 import MapKit
 import WatchConnectivity
 import CoreLocation
-
+import FBSDKCoreKit
+import FBSDKLoginKit
 
 class MainNavigationController : UINavigationController, WCSessionDelegate, CLLocationManagerDelegate {
     
@@ -25,6 +26,7 @@ class MainNavigationController : UINavigationController, WCSessionDelegate, CLLo
     
     var myLocation = [String : AnyObject]()
     
+    var myUser = User.sharedUser()
     
     
     /**
@@ -43,18 +45,57 @@ class MainNavigationController : UINavigationController, WCSessionDelegate, CLLo
         
         manager.delegate = self
         
-        //        startUpdatingLocationAllowingBackground()
         manager.requestWhenInUseAuthorization()
         manager.requestAlwaysAuthorization()
         
-        var baseRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com")
-        var handle = baseRef.observeEventType(.Value, withBlock: { snapshot in
-            print("Snapshot value: \(snapshot.value)")
-        })
         
     }
     
+    func manageLogin() {
+        guard let accessToken = FBSDKAccessToken.currentAccessToken() else {
+            return
+        }
+        
+        let tokenString = accessToken.tokenString
+        
+        
+        User.baseRef.authWithOAuthProvider("facebook", token: tokenString,
+            withCompletionBlock: { error, authData in
+                guard error == nil else {
+                    print("Login failed. \(error)")
+                    return
+                    
+                }
+                print("Logged in! \(authData.uid)")
+                
+                self.myUser.uid = String(authData.uid)
+                self.myUser.isLoggedIn = true
+                
+                guard let userRef = self.myUser.userRef else {
+                    return
+                }
+                
+                userRef.observeSingleEventOfType(.Value, withBlock: { snapshot in
+                    if snapshot.value is NSNull {
+                        return
+                    }
+                    
+                    guard let groupName = snapshot.value["groupname"] as? String else {
+                        return
+                    }
+                    
+                    guard groupName != "" else {
+                        return
+                    }
+                    print("In group! \(groupName)")
+                    
+                    self.myUser.groupname = groupName
+                })
+        })
+    }
+    
     func startUpdatingLocationAllowingBackground() {
+        manageLogin()
         
         guard !isUpdatingLocation else {
             return
@@ -67,6 +108,7 @@ class MainNavigationController : UINavigationController, WCSessionDelegate, CLLo
         manager.startUpdatingLocation()
         
         sessionMessageTimer = NSTimer.scheduledTimerWithTimeInterval(5, target: self, selector: "sendLocationCount", userInfo: nil, repeats: true)
+        
         
     }
     
@@ -145,24 +187,13 @@ class MainNavigationController : UINavigationController, WCSessionDelegate, CLLo
      */
     func sendLocationCount() {
         
-        var buddies = [[String : AnyObject]]()
-        
-        buddies.append(self.myLocation)
-        
-        for index in 1...4 {
-            var newLoc = self.myLocation as! [String : Double]
-            newLoc[DataKey.Latitude.rawValue]! += Double(index) / 2000.0
-            
-            buddies.append(newLoc)
-        }
-        
-        
-        //        fireRef.setValue(buddies)
+        self.myUser.updateLocation(self.myLocation)
+        self.myUser.updateBuddies()
         
         do {
             try session.updateApplicationContext([
                 MessageKey.StateUpdate.rawValue: isUpdatingLocation,
-                MessageKey.Location.rawValue: buddies
+                MessageKey.Location.rawValue: self.myUser.buddies
                 ])
             
         }

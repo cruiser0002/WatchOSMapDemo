@@ -18,6 +18,7 @@ enum DataKey : String {
     case Latitude       = "latitude"
     case GroupName      = "groupname"
     case UserName       = "username"
+    case Location       = "location"
 }
 
 enum MessageKey: String {
