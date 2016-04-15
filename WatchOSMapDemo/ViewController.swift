@@ -16,7 +16,7 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
 
 //    @IBOutlet weak var label: UILabel!
     @IBOutlet weak var map: MKMapView!
-    @IBOutlet weak var textView: UITextView!
+    
     
     var fireRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com/location/WatchOSMapDemo")
     
@@ -175,7 +175,7 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
         }
         
         
-        fireRef.setValue(buddies)
+//        fireRef.setValue(buddies)
         
         do {
             try session.updateApplicationContext([

@@ -1,11 +1,73 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="9532" systemVersion="15E65" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" initialViewController="BYZ-38-t0r">
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="9532" systemVersion="15E65" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" initialViewController="y08-l0-kAy">
     <dependencies>
         <deployment identifier="iOS"/>
         <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="9530"/>
         <capability name="Constraints to layout margins" minToolsVersion="6.0"/>
     </dependencies>
     <scenes>
+        <!--Login View Controller-->
+        <scene sceneID="wzb-fW-DeY">
+            <objects>
+                <viewController id="y08-l0-kAy" customClass="LoginViewController" customModule="WatchOSMapDemo" customModuleProvider="target" sceneMemberID="viewController">
+                    <layoutGuides>
+                        <viewControllerLayoutGuide type="top" id="w4y-Au-gIF"/>
+                        <viewControllerLayoutGuide type="bottom" id="NOa-s5-yY0"/>
+                    </layoutGuides>
+                    <view key="view" contentMode="scaleToFill" id="Fpa-47-szY">
+                        <rect key="frame" x="0.0" y="0.0" width="600" height="600"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <textField opaque="NO" clipsSubviews="YES" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="Group Name" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="kh1-oN-RnT">
+                                <rect key="frame" x="252" y="144" width="97" height="30"/>
+                                <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                <textInputTraits key="textInputTraits"/>
+                            </textField>
+                            <button opaque="NO" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="U3J-2q-I8x" customClass="FBSDKLoginButton">
+                                <rect key="frame" x="267" y="28" width="67" height="30"/>
+                                <state key="normal" title="Facebook"/>
+                            </button>
+                            <textField opaque="NO" clipsSubviews="YES" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="User Name" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="I4t-Lu-Ri3">
+                                <rect key="frame" x="254" y="89" width="93" height="30"/>
+                                <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                <textInputTraits key="textInputTraits"/>
+                            </textField>
+                            <button opaque="NO" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="NC2-qL-Adf">
+                                <rect key="frame" x="277" y="269" width="46" height="30"/>
+                                <state key="normal" title="Status"/>
+                                <connections>
+                                    <action selector="displayStatus:" destination="y08-l0-kAy" eventType="touchUpInside" id="hJF-6v-EuO"/>
+                                </connections>
+                            </button>
+                            <button opaque="NO" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="PqM-fN-6bk">
+                                <rect key="frame" x="252" y="213" width="97" height="30"/>
+                                <state key="normal" title="Start Tracking"/>
+                                <connections>
+                                    <action selector="startPressed:" destination="y08-l0-kAy" eventType="touchUpInside" id="qon-Hd-Dyo"/>
+                                </connections>
+                            </button>
+                        </subviews>
+                        <color key="backgroundColor" white="1" alpha="1" colorSpace="calibratedWhite"/>
+                        <constraints>
+                            <constraint firstItem="PqM-fN-6bk" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="1Qk-rS-ulh"/>
+                            <constraint firstItem="I4t-Lu-Ri3" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="HTf-rc-LZ3"/>
+                            <constraint firstItem="NC2-qL-Adf" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="Ih8-lA-j4f"/>
+                            <constraint firstItem="U3J-2q-I8x" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="cg9-fq-SbO"/>
+                            <constraint firstItem="kh1-oN-RnT" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="iIF-rI-ugs"/>
+                        </constraints>
+                    </view>
+                    <connections>
+                        <outlet property="facebookLogin" destination="U3J-2q-I8x" id="JVF-Cz-qBA"/>
+                        <outlet property="groupnameField" destination="kh1-oN-RnT" id="pB1-Nq-DUu"/>
+                        <outlet property="startButton" destination="PqM-fN-6bk" id="fuf-5r-sa2"/>
+                        <outlet property="statusButton" destination="NC2-qL-Adf" id="zeg-kR-NnX"/>
+                        <outlet property="usernameField" destination="I4t-Lu-Ri3" id="QDJ-kI-paA"/>
+                    </connections>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="AiQ-JS-xLt" userLabel="First Responder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="-476" y="340"/>
+        </scene>
         <!--View Controller-->
         <scene sceneID="tne-QT-ifu">
             <objects>
@@ -18,34 +80,19 @@
                         <rect key="frame" x="0.0" y="0.0" width="600" height="600"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <mapView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" mapType="standard" translatesAutoresizingMaskIntoConstraints="NO" id="zBW-vM-ZaV">
+                            <mapView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" mapType="standard" translatesAutoresizingMaskIntoConstraints="NO" id="zBW-vM-ZaV">
                                 <rect key="frame" x="0.0" y="0.0" width="600" height="448"/>
                             </mapView>
-                            <textView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" textAlignment="natural" translatesAutoresizingMaskIntoConstraints="NO" id="s7Z-3t-XdG">
-                                <rect key="frame" x="0.0" y="450" width="600" height="150"/>
-                                <color key="backgroundColor" white="1" alpha="1" colorSpace="calibratedWhite"/>
-                                <constraints>
-                                    <constraint firstAttribute="height" constant="150" id="aLs-2c-VUr"/>
-                                </constraints>
-                                <string key="text">Lorem ipsum dolor sit er elit lamet, consectetaur cillium adipisicing pecu, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Nam liber te conscient to factor tum poen legum odioque civiuda.</string>
-                                <fontDescription key="fontDescription" type="system" pointSize="14"/>
-                                <textInputTraits key="textInputTraits" autocapitalizationType="sentences"/>
-                            </textView>
                         </subviews>
                         <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="calibratedWhite"/>
                         <constraints>
                             <constraint firstItem="zBW-vM-ZaV" firstAttribute="top" secondItem="8bC-Xf-vdC" secondAttribute="topMargin" id="8Nz-fk-AaV"/>
-                            <constraint firstItem="s7Z-3t-XdG" firstAttribute="top" secondItem="zBW-vM-ZaV" secondAttribute="bottom" constant="2" id="8xx-A4-A65"/>
-                            <constraint firstItem="s7Z-3t-XdG" firstAttribute="leading" secondItem="8bC-Xf-vdC" secondAttribute="leadingMargin" constant="-20" id="F6y-2a-h6C"/>
                             <constraint firstAttribute="trailingMargin" secondItem="zBW-vM-ZaV" secondAttribute="trailing" constant="-20" id="MFw-hH-uF2"/>
-                            <constraint firstItem="wfy-db-euE" firstAttribute="top" secondItem="s7Z-3t-XdG" secondAttribute="bottom" id="THe-TT-ZOz"/>
                             <constraint firstItem="zBW-vM-ZaV" firstAttribute="leading" secondItem="8bC-Xf-vdC" secondAttribute="leadingMargin" constant="-20" id="hme-6f-Zp9"/>
-                            <constraint firstAttribute="trailingMargin" secondItem="s7Z-3t-XdG" secondAttribute="trailing" constant="-20" id="qh3-hf-W3w"/>
                         </constraints>
                     </view>
                     <connections>
                         <outlet property="map" destination="zBW-vM-ZaV" id="hKh-VW-DCN"/>
-                        <outlet property="textView" destination="s7Z-3t-XdG" id="cx5-eA-sW6"/>
                     </connections>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="dkx-z0-nzr" sceneMemberID="firstResponder"/>
