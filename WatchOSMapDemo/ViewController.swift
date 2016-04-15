@@ -51,15 +51,34 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
         map.mapType = .Standard
         map.userTrackingMode = .Follow
 
-        updateTimer = NSTimer.scheduledTimerWithTimeInterval(5, target: self, selector: "updateBuddies", userInfo: nil, repeats: true)
+        updateTimer = NSTimer.scheduledTimerWithTimeInterval(5, target: self, selector: "updateLocation", userInfo: nil, repeats: true)
     }
 
-    func updateBuddies () {
+    func updateLocation () {
+        
+        
+        self.myUser.updateLocation()
+        self.myUser.updateBuddies()
+        
         let buddies = self.myUser.buddies
         
-        for index in buddies {
-            
+//        print(buddies)
+        var annotations = [MKAnnotation]()
+        
+        for buddy in buddies {
+            guard let long = buddy[DataKey.Longitude.rawValue] as? CLLocationDegrees,
+            let lat = buddy[DataKey.Latitude.rawValue] as? CLLocationDegrees else
+            {
+                continue
+            }
+            let coordinate = CLLocationCoordinate2DMake(lat, long)
+            let annotation = MKPointAnnotation()
+            annotation.coordinate = coordinate
+            annotations.append(annotation)
         }
+        
+        map.removeAnnotations(map.annotations)
+        map.addAnnotations(annotations)
         
     }
     
@@ -72,6 +91,13 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
     
     func locationManager(manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         
+        let currentLocation = locations.last!
+        
+        let lat = currentLocation.coordinate.latitude as Double
+        let long = currentLocation.coordinate.longitude as Double
+        
+        self.myUser.location = [DataKey.Latitude.rawValue: lat, DataKey.Longitude.rawValue : long]
+
     }
     
     /// Log any errors to the console.

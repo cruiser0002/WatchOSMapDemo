@@ -101,10 +101,10 @@ class User {
         return User.usersRef.childByAppendingPath(uid)
     }
     
-    func updateLocation (location: [String : AnyObject]) {
+    func updateLocation () {
         let locationRef = self.groupRef?.childByAppendingPath(uid).childByAppendingPath("location")
-        self.location = location
-        locationRef?.updateChildValues(location)
+        
+        locationRef?.updateChildValues(self.location)
     }
     
     static var usersRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com/location/WatchOSMapDemo/users")

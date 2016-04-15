@@ -34,45 +34,40 @@
                         <rect key="frame" x="0.0" y="0.0" width="600" height="600"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="PqM-fN-6bk">
-                                <rect key="frame" x="177" y="140" width="97" height="30"/>
+                            <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="U3J-2q-I8x" customClass="FBSDKLoginButton">
+                                <rect key="frame" x="20" y="81" width="560" height="30"/>
+                                <state key="normal" title="Facebook"/>
+                            </button>
+                            <textField opaque="NO" clipsSubviews="YES" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="Group Name" textAlignment="center" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="kh1-oN-RnT">
+                                <rect key="frame" x="20" y="119" width="560" height="30"/>
+                                <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                <textInputTraits key="textInputTraits" autocorrectionType="no" spellCheckingType="no" keyboardType="alphabet"/>
+                            </textField>
+                            <button opaque="NO" contentMode="scaleToFill" ambiguous="YES" misplaced="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="PqM-fN-6bk">
+                                <rect key="frame" x="252" y="212" width="97" height="30"/>
                                 <state key="normal" title="Start Tracking"/>
                                 <connections>
                                     <action selector="startPressed:" destination="y08-l0-kAy" eventType="touchUpInside" id="qon-Hd-Dyo"/>
                                     <segue destination="BYZ-38-t0r" kind="show" id="8oV-Rr-O0I"/>
                                 </connections>
                             </button>
-                            <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="U3J-2q-I8x" customClass="FBSDKLoginButton">
-                                <rect key="frame" x="27" y="96" width="67" height="30"/>
-                                <state key="normal" title="Facebook"/>
-                            </button>
-                            <textField opaque="NO" clipsSubviews="YES" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="User Name" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="I4t-Lu-Ri3">
-                                <rect key="frame" x="27" y="141" width="93" height="30"/>
-                                <fontDescription key="fontDescription" type="system" pointSize="14"/>
-                                <textInputTraits key="textInputTraits"/>
-                            </textField>
-                            <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="NC2-qL-Adf">
-                                <rect key="frame" x="334" y="140" width="46" height="30"/>
-                                <state key="normal" title="Status"/>
-                                <connections>
-                                    <action selector="displayStatus:" destination="y08-l0-kAy" eventType="touchUpInside" id="hJF-6v-EuO"/>
-                                </connections>
-                            </button>
-                            <textField opaque="NO" clipsSubviews="YES" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="Group Name" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="kh1-oN-RnT">
-                                <rect key="frame" x="171" y="96" width="97" height="30"/>
-                                <fontDescription key="fontDescription" type="system" pointSize="14"/>
-                                <textInputTraits key="textInputTraits" autocorrectionType="no" spellCheckingType="no" keyboardType="alphabet"/>
-                            </textField>
                         </subviews>
                         <color key="backgroundColor" white="1" alpha="1" colorSpace="calibratedWhite"/>
+                        <constraints>
+                            <constraint firstItem="U3J-2q-I8x" firstAttribute="leading" secondItem="Fpa-47-szY" secondAttribute="leadingMargin" id="4l9-HR-dfD"/>
+                            <constraint firstItem="kh1-oN-RnT" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="AHJ-cG-Bae"/>
+                            <constraint firstItem="U3J-2q-I8x" firstAttribute="top" secondItem="w4y-Au-gIF" secondAttribute="bottom" constant="17" id="Gec-IC-6JR"/>
+                            <constraint firstItem="PqM-fN-6bk" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="M1f-7t-rws"/>
+                            <constraint firstItem="PqM-fN-6bk" firstAttribute="top" secondItem="kh1-oN-RnT" secondAttribute="bottom" constant="63" id="ODW-Cs-swT"/>
+                            <constraint firstItem="U3J-2q-I8x" firstAttribute="centerX" secondItem="Fpa-47-szY" secondAttribute="centerX" id="XQM-z0-xFe"/>
+                            <constraint firstItem="U3J-2q-I8x" firstAttribute="trailing" secondItem="Fpa-47-szY" secondAttribute="trailingMargin" id="qYd-2v-zo3"/>
+                        </constraints>
                     </view>
                     <navigationItem key="navigationItem" id="y7D-4b-LWp"/>
                     <connections>
                         <outlet property="facebookLogin" destination="U3J-2q-I8x" id="JVF-Cz-qBA"/>
                         <outlet property="groupnameField" destination="kh1-oN-RnT" id="pB1-Nq-DUu"/>
                         <outlet property="startButton" destination="PqM-fN-6bk" id="fuf-5r-sa2"/>
-                        <outlet property="statusButton" destination="NC2-qL-Adf" id="zeg-kR-NnX"/>
-                        <outlet property="usernameField" destination="I4t-Lu-Ri3" id="QDJ-kI-paA"/>
                     </connections>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="AiQ-JS-xLt" userLabel="First Responder" sceneMemberID="firstResponder"/>

@@ -24,8 +24,6 @@ class MainNavigationController : UINavigationController, WCSessionDelegate, CLLo
     var isUpdatingLocation = false
     var receivedLocationCount = 0
     
-    var myLocation = [String : AnyObject]()
-    
     var myUser = User.sharedUser()
     
     
@@ -107,7 +105,7 @@ class MainNavigationController : UINavigationController, WCSessionDelegate, CLLo
         
         manager.startUpdatingLocation()
         
-        sessionMessageTimer = NSTimer.scheduledTimerWithTimeInterval(5, target: self, selector: "sendLocationCount", userInfo: nil, repeats: true)
+        sessionMessageTimer = NSTimer.scheduledTimerWithTimeInterval(5, target: self, selector: "sendLocation", userInfo: nil, repeats: true)
         
         
     }
@@ -185,9 +183,9 @@ class MainNavigationController : UINavigationController, WCSessionDelegate, CLLo
      Send the current cumulative location to the watch and reset the batch
      count to zero.
      */
-    func sendLocationCount() {
+    func sendLocation() {
         
-        self.myUser.updateLocation(self.myLocation)
+        self.myUser.updateLocation()
         self.myUser.updateBuddies()
         
         do {
@@ -207,14 +205,13 @@ class MainNavigationController : UINavigationController, WCSessionDelegate, CLLo
      manager. Updates the batch count with the added locations.
      */
     func locationManager(manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        self.receivedLocationCount += locations.count
-        
+                
         let currentLocation = locations.last!
         
         let lat = currentLocation.coordinate.latitude as Double
         let long = currentLocation.coordinate.longitude as Double
         
-        self.myLocation = [DataKey.Latitude.rawValue: lat, DataKey.Longitude.rawValue : long]
+        self.myUser.location = [DataKey.Latitude.rawValue: lat, DataKey.Longitude.rawValue : long]
         
     }
     

@@ -17,9 +17,8 @@ import FBSDKLoginKit
 
 class LoginViewController : UIViewController, FBSDKLoginButtonDelegate, UITextFieldDelegate{
     
-    @IBOutlet weak var statusButton: UIButton!
     @IBOutlet weak var startButton: UIButton!
-    @IBOutlet weak var usernameField: UITextField!
+    
     @IBOutlet weak var groupnameField: UITextField!
     
     @IBOutlet weak var facebookLogin: FBSDKLoginButton!
@@ -31,8 +30,8 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate, UITextFi
         
         self.groupnameField.enabled = false
         self.groupnameField.delegate = self
-        self.startButton.enabled = false
         
+        self.startButton.enabled = false
         self.facebookLogin.delegate = self
         
         manageLogin()
@@ -110,11 +109,6 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate, UITextFi
     
     func removePreviousGroups(completion: () -> Void) {
         
-//        guard let userRef = self.myUser.userRef else {
-//            completion()
-//            return
-//        }
-        
         guard let userInGroup = self.myUser.userInGroup else {
             completion()
             return
@@ -122,12 +116,7 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate, UITextFi
         
         userInGroup.removeValue()
         
-//        userRef.setValue("")
-//        self.myUser.groupname = nil
-        
         completion()
-        
-        
     }
     
     @IBAction func startPressed(sender: AnyObject) {
