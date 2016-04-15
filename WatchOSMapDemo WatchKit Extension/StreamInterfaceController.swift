@@ -154,11 +154,15 @@ class StreamInterfaceController: WKInterfaceController, WCSessionDelegate, CLLoc
         dispatch_async(dispatch_get_main_queue()) {
 //            let test = ["location": "-122.26651906", "latitude": "37.4439116"]
             
-            guard let location = applicationContext[MessageKey.Location.rawValue] as? [String: AnyObject] else {
+            guard var locations = applicationContext[MessageKey.Location.rawValue] as? [[String: AnyObject]] else {
                 print(applicationContext)
                 return
             }
 //            print(location[MessageKey.Longitude.rawValue])
+            
+            guard let location = locations.first else {
+                return
+            }
             
             guard let lat = location[DataKey.Latitude.rawValue] as? CLLocationDegrees,
             let long = location[DataKey.Longitude.rawValue] as? CLLocationDegrees else
@@ -173,6 +177,22 @@ class StreamInterfaceController: WKInterfaceController, WCSessionDelegate, CLLoc
             self.map.setRegion(region)
             self.map.removeAllAnnotations()
             self.map.addAnnotation(self.mapLocation!, withPinColor: .Red)
+            
+            locations.removeFirst()
+//            print(locations.count)
+            
+            
+            for loc in locations {
+                guard let lat = loc[DataKey.Latitude.rawValue] as? CLLocationDegrees,
+                    let long = loc[DataKey.Longitude.rawValue] as? CLLocationDegrees else
+                {
+                    break
+                }
+                
+                self.map.addAnnotation(CLLocationCoordinate2DMake(lat, long), withPinColor: .Green)
+            }
+            
+            
         }
     }
     

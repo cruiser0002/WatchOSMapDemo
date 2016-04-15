@@ -162,23 +162,31 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
      count to zero.
      */
     func sendLocationCount() {
+        
+        var buddies = [[String : AnyObject]]()
+        
+        buddies.append(self.myLocation)
+        
+        for index in 1...4 {
+            var newLoc = self.myLocation as! [String : Double]
+            newLoc[DataKey.Latitude.rawValue]! += Double(index) / 2000.0
+            
+            buddies.append(newLoc)
+        }
+        
+        
+        fireRef.setValue(buddies)
+        
         do {
             try session.updateApplicationContext([
                 MessageKey.StateUpdate.rawValue: isUpdatingLocation,
-                MessageKey.Location.rawValue: self.myLocation
+                MessageKey.Location.rawValue: buddies
                 ])
             
         }
         catch let error as NSError {
             print("Error when updating application context \(error).")
         }
-        
-//        let annotation = MKPointAnnotation()
-//        annotation.coordinate = 
-        
-        fireRef.setValue(self.myLocation)
-        
-        
     }
     
     /**
