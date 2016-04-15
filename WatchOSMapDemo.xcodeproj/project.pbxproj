@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		D2BE94E38FAFE8BEB26FD4D4 /* Pods_WatchOSMapDemo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 52945ADB8E4CF3644FD4D625 /* Pods_WatchOSMapDemo.framework */; };
+		A733B71A37D2DCA64B5DFD76 /* libPods-WatchOSMapDemo.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 86B945F22160A579FB34F110 /* libPods-WatchOSMapDemo.a */; };
 		E07A40BC1CBEC01A0041125F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A40BB1CBEC01A0041125F /* AppDelegate.swift */; };
 		E07A40BE1CBEC01A0041125F /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07A40BD1CBEC01A0041125F /* ViewController.swift */; };
 		E07A40C11CBEC01A0041125F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E07A40BF1CBEC01A0041125F /* Main.storyboard */; };
@@ -69,8 +69,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		52945ADB8E4CF3644FD4D625 /* Pods_WatchOSMapDemo.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_WatchOSMapDemo.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		7435BA15DB130D6A975D140A /* Pods-WatchOSMapDemo.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-WatchOSMapDemo.debug.xcconfig"; path = "Pods/Target Support Files/Pods-WatchOSMapDemo/Pods-WatchOSMapDemo.debug.xcconfig"; sourceTree = "<group>"; };
+		86B945F22160A579FB34F110 /* libPods-WatchOSMapDemo.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-WatchOSMapDemo.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF6475C9C56E2E3A837FCA62 /* Pods-WatchOSMapDemo.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-WatchOSMapDemo.release.xcconfig"; path = "Pods/Target Support Files/Pods-WatchOSMapDemo/Pods-WatchOSMapDemo.release.xcconfig"; sourceTree = "<group>"; };
 		E07A40B81CBEC01A0041125F /* WatchOSMapDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WatchOSMapDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E07A40BB1CBEC01A0041125F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -100,7 +100,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D2BE94E38FAFE8BEB26FD4D4 /* Pods_WatchOSMapDemo.framework in Frameworks */,
+				A733B71A37D2DCA64B5DFD76 /* libPods-WatchOSMapDemo.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -126,7 +126,7 @@
 		815F185418D332A839C78323 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				52945ADB8E4CF3644FD4D625 /* Pods_WatchOSMapDemo.framework */,
+				86B945F22160A579FB34F110 /* libPods-WatchOSMapDemo.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

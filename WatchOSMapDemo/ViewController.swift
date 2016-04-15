@@ -11,11 +11,14 @@ import MapKit
 import WatchConnectivity
 import CoreLocation
 
+
 class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDelegate {
 
 //    @IBOutlet weak var label: UILabel!
     @IBOutlet weak var map: MKMapView!
     @IBOutlet weak var textView: UITextView!
+    
+    var fireRef = Firebase(url: "https://torrid-heat-3834.firebaseio.com/location/WatchOSMapDemo")
     
     /// Default WatchConnectivity session for communicating with the watch.
     let session = WCSession.defaultSession()
@@ -173,6 +176,7 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
 //        let annotation = MKPointAnnotation()
 //        annotation.coordinate = 
         
+        fireRef.setValue(self.myLocation)
         
         
     }

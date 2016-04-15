@@ -14,10 +14,10 @@
             buildForArchiving = "YES">
             <BuildableReference
                BuildableIdentifier = 'primary'
-               BlueprintIdentifier = '4AD85E4B20F2C2F6B169641C'
+               BlueprintIdentifier = '48C7535D94341E7732E2EC8F'
                BlueprintName = 'Pods-WatchOSMapDemo'
                ReferencedContainer = 'container:Pods.xcodeproj'
-               BuildableName = 'Pods_WatchOSMapDemo.framework'>
+               BuildableName = 'libPods-WatchOSMapDemo.a'>
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
