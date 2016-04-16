@@ -140,6 +140,7 @@ class MainNavigationController : UINavigationController, WCSessionDelegate, CLLo
             return
         }
         
+        self.myUser.buddies = [[String : AnyObject]]()
         userInGroup.removeValue()
         
     }
