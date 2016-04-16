@@ -53,6 +53,12 @@ class ViewController: UIViewController, WCSessionDelegate, CLLocationManagerDele
 
         updateTimer = NSTimer.scheduledTimerWithTimeInterval(5, target: self, selector: "updateLocation", userInfo: nil, repeats: true)
     }
+    
+    override func viewWillDisappear(animated: Bool) {
+        super.viewWillDisappear(animated)
+        
+        updateTimer.invalidate()
+    }
 
     func updateLocation () {
         

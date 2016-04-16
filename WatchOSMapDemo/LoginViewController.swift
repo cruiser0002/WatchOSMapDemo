@@ -148,14 +148,20 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate, UITextFi
     func loginButtonDidLogOut(loginButton: FBSDKLoginButton!)
     {
         print("loginButtonDidLogOut")
-        let loginManager: FBSDKLoginManager = FBSDKLoginManager()
-        loginManager.logOut()
-        self.groupnameField.enabled = false
-        self.startButton.enabled = false
+
         
         removePreviousGroups { () -> Void in
-            return
+            let loginManager: FBSDKLoginManager = FBSDKLoginManager()
+            
+            dispatch_async(dispatch_get_main_queue()) {
+                loginManager.logOut()
+            }
+            
+            User.baseRef.unauth()
         }
+        
+        self.groupnameField.enabled = false
+        self.startButton.enabled = false
     }
     
     func loginButtonWillLogin(loginButton: FBSDKLoginButton!) -> Bool {
@@ -163,7 +169,4 @@ class LoginViewController : UIViewController, FBSDKLoginButtonDelegate, UITextFi
         return true
     }
 
-    @IBAction func displayStatus(sender: AnyObject) {
-        manageLogin()
-    }
 }
