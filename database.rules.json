@@ -1,0 +1,30 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        "info": {
+          ".read": "auth != null",
+          ".write": "auth != null && (!data.exists() || data.child('hostId').val() === auth.uid)"
+        },
+        "security": {
+          ".read": "auth != null && data.parent().child('info/hostId').val() === auth.uid",
+          ".write": "auth != null && (!data.exists() || data.parent().child('info/hostId').val() === auth.uid)"
+        },
+        "members": {
+          ".read": "auth != null",
+          "$memberId": {
+            ".write": "auth != null && ($memberId === auth.uid || data.parent().parent().child('info/hostId').val() === auth.uid)"
+          }
+        }
+      }
+    },
+    "telemetry": {
+      "$roomId": {
+        ".read": "auth != null && root.child('rooms').child($roomId).child('members').child(auth.uid).exists()",
+        "$memberId": {
+          ".write": "auth != null && $memberId === auth.uid && root.child('rooms').child($roomId).child('members').child(auth.uid).exists()"
+        }
+      }
+    }
+  }
+}

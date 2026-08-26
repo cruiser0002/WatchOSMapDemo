@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.radarmap.watch</string>
+    <key>CFBundleName</key>
+    <string>Radar Map</string>
+    <key>CFBundleDisplayName</key>
+    <string>Radar Map</string>
+    <key>CFBundleExecutable</key>
+    <string>RadarMap</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>WKApplication</key>
+    <true/>
+    <key>WKWatchOnly</key>
+    <true/>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Radar Map requires your location to display your position on the tactical milsim map and share it with your squad.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Radar Map tracks tactical coordinates during active squad sessions.</string>
+    <key>NSHealthShareUsageDescription</key>
+    <string>Radar Map reads your heart rate to stream live squad biometric stress levels to teammates.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>Radar Map records tactical workout sessions to maintain live heart rate streaming.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Radar Map uses Bluetooth Low Energy for nearby squad room discovery and peer synchronization.</string>
+    <key>WKBackgroundModes</key>
+    <array>
+        <string>workout-processing</string>
+        <string>location</string>
+    </array>
+</dict>
+</plist>
