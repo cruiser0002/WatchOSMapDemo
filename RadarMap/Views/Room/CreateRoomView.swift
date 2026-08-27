@@ -4,9 +4,9 @@ public struct CreateRoomView: View {
     @EnvironmentObject var gameState: GameStateManager
     @Environment(\.dismiss) private var dismiss
     
-    @State private var roomName: String = "Alpha Squad"
+    @State private var roomName: String = ""
     @State private var roomPassword: String = ""
-    @State private var squadCapacity: Int = 4
+    @State private var squadCapacity: Int = AppConstants.Subscription.freeTierMaxCapacity
     @State private var showPaywall: Bool = false
     @State private var navigateToLobby: Bool = false
     
@@ -19,6 +19,8 @@ public struct CreateRoomView: View {
                     // Room Name Field
                     TextField("Squad Name", text: $roomName)
                         .font(.system(size: 12))
+                        .foregroundColor((gameState.isHosting || gameState.firebaseManager.isConnected) ? .gray : .primary)
+                        .opacity((gameState.isHosting || gameState.firebaseManager.isConnected) ? 0.6 : 1.0)
                         .padding(8)
                         .background(Color.white.opacity(0.1))
                         .cornerRadius(6)
@@ -26,45 +28,32 @@ public struct CreateRoomView: View {
                         .submitLabel(.done)
                         .autocorrectionDisabled(true)
                         .disabled(gameState.isHosting || gameState.firebaseManager.isConnected)
+                        .onChange(of: roomName) { _, newValue in
+                            gameState.savedRoomName = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
                     
                     // Squad Password / PIN Field (4-digit number only)
-                    #if os(iOS)
                     TextField("Squad PIN (4 digits, optional)", text: $roomPassword)
                         .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor((gameState.isHosting || gameState.firebaseManager.isConnected) ? .gray : .primary)
+                        .opacity((gameState.isHosting || gameState.firebaseManager.isConnected) ? 0.6 : 1.0)
                         .padding(8)
                         .background(Color.white.opacity(0.1))
                         .cornerRadius(6)
                         .lineLimit(1)
                         .submitLabel(.done)
-                        .keyboardType(.numberPad)
                         .textContentType(.oneTimeCode)
+                        #if os(iOS)
+                        .keyboardType(.numberPad)
+                        #endif
                         .disabled(gameState.isHosting || gameState.firebaseManager.isConnected)
                         .onChange(of: roomPassword) { _, newValue in
-                            let filtered = newValue.filter { $0.isNumber }
-                            if filtered.count > 4 {
-                                roomPassword = String(filtered.prefix(4))
-                            } else if filtered != newValue {
-                                roomPassword = filtered
+                            let sanitized = GameStateManager.sanitizePinInput(newValue)
+                            if roomPassword != sanitized {
+                                roomPassword = sanitized
                             }
+                            gameState.savedPin = roomPassword
                         }
-                    #else
-                    TextField("Squad PIN (4 digits, optional)", text: $roomPassword)
-                        .font(.system(size: 12, design: .monospaced))
-                        .padding(8)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(6)
-                        .lineLimit(1)
-                        .submitLabel(.done)
-                        .disabled(gameState.isHosting || gameState.firebaseManager.isConnected)
-                        .onChange(of: roomPassword) { _, newValue in
-                            let filtered = newValue.filter { $0.isNumber }
-                            if filtered.count > 4 {
-                                roomPassword = String(filtered.prefix(4))
-                            } else if filtered != newValue {
-                                roomPassword = filtered
-                            }
-                        }
-                    #endif
                     
                     // Capacity Tier Status (4 or 999)
                     VStack(alignment: .leading, spacing: 2) {
@@ -75,11 +64,11 @@ public struct CreateRoomView: View {
                             Spacer()
                             
                             if gameState.subscriptionManager.hasUnlimitedSquadUnlock {
-                                Text("999 (Unlimited Pro)")
+                                Text("Unlimited (Squad Leader Pro)")
                                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                                     .foregroundColor(.green)
                             } else {
-                                Text("4 operators (Free)")
+                                Text("\(AppConstants.Subscription.freeTierMaxCapacity) operators (Free)")
                                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                                     .foregroundColor(.yellow)
                             }
@@ -92,7 +81,7 @@ public struct CreateRoomView: View {
                                 HStack(spacing: 4) {
                                     Image(systemName: "lock.fill")
                                         .font(.system(size: 9))
-                                    Text("Upgrade to 999 Players ($9.99)")
+                                    Text("Upgrade to Unlimited Players (\(AppConstants.Subscription.lifetimePriceString))")
                                         .font(.system(size: 9, weight: .bold))
                                 }
                                 .frame(maxWidth: .infinity)
@@ -147,6 +136,14 @@ public struct CreateRoomView: View {
             .sheet(isPresented: $gameState.showPaywallSheet) {
                 PaywallView()
                     .environmentObject(gameState)
+            }
+            .onAppear {
+                if roomName.isEmpty {
+                    roomName = gameState.savedRoomName
+                }
+                if roomPassword.isEmpty {
+                    roomPassword = gameState.savedPin
+                }
             }
         }
     }

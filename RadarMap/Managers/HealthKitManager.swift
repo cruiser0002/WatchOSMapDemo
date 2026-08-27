@@ -40,7 +40,7 @@ public final class HealthKitManager: NSObject, ObservableObject {
         #else
         // Mock fallback for simulator/host tests
         DispatchQueue.main.async {
-            self.currentHeartRate = 78.0
+            self.currentHeartRate = AppConstants.Health.mockRestingHeartRate
             completion(true)
         }
         #endif
@@ -74,7 +74,7 @@ public final class HealthKitManager: NSObject, ObservableObject {
         }
         #else
         isSessionActive = true
-        currentHeartRate = 82.0
+        currentHeartRate = AppConstants.Health.mockWorkoutHeartRate
         #endif
     }
     

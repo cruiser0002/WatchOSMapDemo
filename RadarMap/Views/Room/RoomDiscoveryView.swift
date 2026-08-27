@@ -52,7 +52,8 @@ public struct RoomDiscoveryView: View {
                     
                     ForEach(gameState.bluetoothManager.discoveredRooms) { room in
                         Button(action: {
-                            gameState.joinRoom(id: room.id, name: room.name) { success in
+                            let pin = manualPin.trimmingCharacters(in: .whitespacesAndNewlines)
+                            gameState.joinRoom(id: room.id, name: room.name, pin: pin.isEmpty ? nil : pin) { success in
                                 if success {
                                     dismiss()
                                 }
@@ -60,9 +61,16 @@ public struct RoomDiscoveryView: View {
                         }) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(room.name)
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundColor(.white)
+                                    HStack(spacing: 4) {
+                                        Text(room.name)
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(.white)
+                                        if room.hasPin {
+                                            Image(systemName: "lock.fill")
+                                                .font(.system(size: 9))
+                                                .foregroundColor(.yellow)
+                                        }
+                                    }
                                     
                                     Text("Code: \(room.id)")
                                         .font(.system(size: 9, design: .monospaced))
@@ -82,51 +90,39 @@ public struct RoomDiscoveryView: View {
                 
                 // Direct Room Entry Section
                 Section(header: Text("Direct Join").font(.system(size: 9))) {
-                    #if os(iOS)
                     TextField("Squad Name", text: $manualRoomCode)
                         .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor((gameState.isJoining || gameState.firebaseManager.isConnected) ? .gray : .primary)
+                        .opacity((gameState.isJoining || gameState.firebaseManager.isConnected) ? 0.6 : 1.0)
                         .lineLimit(1)
                         .submitLabel(.done)
                         .autocorrectionDisabled(true)
+                        #if os(iOS)
                         .textInputAutocapitalization(.characters)
+                        #endif
                         .disabled(gameState.isJoining || gameState.firebaseManager.isConnected)
+                        .onChange(of: manualRoomCode) { _, newValue in
+                            gameState.savedRoomName = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
                     
                     TextField("PIN (4 digits)", text: $manualPin)
                         .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor((gameState.isJoining || gameState.firebaseManager.isConnected) ? .gray : .primary)
+                        .opacity((gameState.isJoining || gameState.firebaseManager.isConnected) ? 0.6 : 1.0)
                         .lineLimit(1)
                         .submitLabel(.done)
-                        .keyboardType(.numberPad)
                         .textContentType(.oneTimeCode)
+                        #if os(iOS)
+                        .keyboardType(.numberPad)
+                        #endif
                         .disabled(gameState.isJoining || gameState.firebaseManager.isConnected)
                         .onChange(of: manualPin) { _, newValue in
-                            let filtered = newValue.filter { $0.isNumber }
-                            if filtered.count > 4 {
-                                manualPin = String(filtered.prefix(4))
-                            } else if filtered != newValue {
-                                manualPin = filtered
+                            let sanitized = GameStateManager.sanitizePinInput(newValue)
+                            if manualPin != sanitized {
+                                manualPin = sanitized
                             }
+                            gameState.savedPin = manualPin
                         }
-                    #else
-                    TextField("Squad Name", text: $manualRoomCode)
-                        .font(.system(size: 11, design: .monospaced))
-                        .lineLimit(1)
-                        .submitLabel(.done)
-                        .disabled(gameState.isJoining || gameState.firebaseManager.isConnected)
-                    
-                    TextField("PIN (4 digits)", text: $manualPin)
-                        .font(.system(size: 11, design: .monospaced))
-                        .lineLimit(1)
-                        .submitLabel(.done)
-                        .disabled(gameState.isJoining || gameState.firebaseManager.isConnected)
-                        .onChange(of: manualPin) { _, newValue in
-                            let filtered = newValue.filter { $0.isNumber }
-                            if filtered.count > 4 {
-                                manualPin = String(filtered.prefix(4))
-                            } else if filtered != newValue {
-                                manualPin = filtered
-                            }
-                        }
-                    #endif
                     
                     Button(action: {
                         let cleaned = manualRoomCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -181,6 +177,12 @@ public struct RoomDiscoveryView: View {
         }
         .onAppear {
             gameState.bluetoothManager.startScanning()
+            if manualRoomCode.isEmpty {
+                manualRoomCode = gameState.savedRoomName
+            }
+            if manualPin.isEmpty {
+                manualPin = gameState.savedPin
+            }
         }
         .onDisappear {
             gameState.bluetoothManager.stopScanning()

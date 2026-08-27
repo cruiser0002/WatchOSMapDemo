@@ -1,6 +1,5 @@
 import Foundation
 import CoreLocation
-import SwiftUI
 
 public enum MemberStatus: String, Codable {
     case active
@@ -34,13 +33,13 @@ public struct SquadMember: Identifiable, Codable, Equatable {
         longitude: Double,
         altitude: Double? = nil,
         heading: Double = 0.0,
-        heartRate: Double = 0.0,
+        heartRate: Double = AppConstants.Health.defaultRestingHeartRate,
         batteryLevel: Double = 1.0,
         lastUpdatedTimestamp: TimeInterval = Date().timeIntervalSince1970,
         sequenceNumber: Int64 = 0,
         status: MemberStatus = .active,
         isHost: Bool = false,
-        colorHex: String = "#00FF66" // Tactical Green default
+        colorHex: String = AppConstants.UI.defaultTacticalColorHex
     ) {
         self.id = id
         self.callsign = callsign
@@ -61,6 +60,16 @@ public struct SquadMember: Identifiable, Codable, Equatable {
         case id, callsign, latitude, longitude, altitude, heading, heartRate, batteryLevel, lastUpdatedTimestamp, sequenceNumber, status, isHost, colorHex
     }
 
+    /// Serializes member metadata for the room roster endpoint (`/rooms/{roomId}/members`).
+    /// Dynamic real-time telemetry (location, heading, heart rate) is purposefully excluded here
+    /// and streamed independently over the telemetry endpoint (`/telemetry/{roomId}`).
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(callsign, forKey: .callsign)
+        try container.encode(isHost, forKey: .isHost)
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
@@ -69,28 +78,49 @@ public struct SquadMember: Identifiable, Codable, Equatable {
         longitude = try container.decodeIfPresent(Double.self, forKey: .longitude) ?? 0.0
         altitude = try container.decodeIfPresent(Double.self, forKey: .altitude)
         heading = try container.decodeIfPresent(Double.self, forKey: .heading) ?? 0.0
-        heartRate = try container.decodeIfPresent(Double.self, forKey: .heartRate) ?? 75.0
-        batteryLevel = try container.decodeIfPresent(Double.self, forKey: .batteryLevel) ?? 1.0
+        heartRate = try container.decodeIfPresent(Double.self, forKey: .heartRate) ?? AppConstants.Health.defaultRestingHeartRate
+        batteryLevel = try container.decodeIfPresent(Double.self, forKey: .batteryLevel) ?? AppConstants.UI.defaultBatteryLevel
         lastUpdatedTimestamp = try container.decodeIfPresent(TimeInterval.self, forKey: .lastUpdatedTimestamp) ?? Date().timeIntervalSince1970
         sequenceNumber = try container.decodeIfPresent(Int64.self, forKey: .sequenceNumber) ?? 0
         status = try container.decodeIfPresent(MemberStatus.self, forKey: .status) ?? .active
         isHost = try container.decodeIfPresent(Bool.self, forKey: .isHost) ?? false
-        colorHex = try container.decodeIfPresent(String.self, forKey: .colorHex) ?? "#00FF66"
+        colorHex = try container.decodeIfPresent(String.self, forKey: .colorHex) ?? AppConstants.UI.defaultTacticalColorHex
+    }
+    // MARK: - Stale / Inactivity Timeout Configuration
+    
+    /// Stale timeout multiplier (M). The number of missed update intervals
+    /// before a squad member's telemetry is considered stale and rendered gray.
+    public static var staleTimeoutMultiplier: Double = AppConstants.Timing.Stale.defaultTimeoutMultiplier
+    
+    /// Default update interval in seconds when calculating timeout.
+    public static var defaultUpdateInterval: TimeInterval = AppConstants.Timing.Stale.defaultUpdateInterval
+    
+    /// Calculates the stale timeout duration in seconds: M * updateInterval.
+    /// E.g. If M = 15 and update interval = 2.0s, timeout is 30.0s.
+    public static func staleTimeoutDuration(
+        updateInterval: TimeInterval = defaultUpdateInterval,
+        multiplier: Double = staleTimeoutMultiplier
+    ) -> TimeInterval {
+        multiplier * updateInterval
     }
     
-    // Heart rate stress level categorization
-    public var heartRateZoneColor: Color {
-        switch heartRate {
-        case ..<60:
-            return .blue
-        case 60..<100:
-            return .green
-        case 100..<140:
-            return .yellow
-        case 140..<175:
-            return .orange
-        default:
-            return .red
-        }
+    /// Determines whether the member's telemetry is older than the computed stale timeout (M * updateInterval).
+    public func isStale(
+        updateInterval: TimeInterval = SquadMember.defaultUpdateInterval,
+        multiplier: Double = SquadMember.staleTimeoutMultiplier,
+        asOf now: Date = Date()
+    ) -> Bool {
+        let timeout = SquadMember.staleTimeoutDuration(updateInterval: updateInterval, multiplier: multiplier)
+        return now.timeIntervalSince1970 - lastUpdatedTimestamp > timeout
+    }
+    
+    /// Determines whether the member's telemetry is older than the default stale timeout.
+    public var isStale: Bool {
+        isStale(updateInterval: SquadMember.defaultUpdateInterval, multiplier: SquadMember.staleTimeoutMultiplier, asOf: Date())
+    }
+    
+    /// Determines whether the member's telemetry is stale relative to a reference date.
+    public func isStale(asOf now: Date) -> Bool {
+        isStale(updateInterval: SquadMember.defaultUpdateInterval, multiplier: SquadMember.staleTimeoutMultiplier, asOf: now)
     }
 }

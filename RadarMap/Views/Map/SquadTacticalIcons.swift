@@ -37,21 +37,25 @@ public struct SquadPlayerShape: Shape {
         let height = rect.height
         
         let center = CGPoint(x: width / 2, y: height / 2)
-        let radius = min(width, height) * 0.38
+        let radius = min(width, height) * AppConstants.UI.TacticalShapes.playerRadiusFactor
         
         // Circular base body with forward pointing nose
         let noseTip = CGPoint(x: width / 2, y: 0)
-        let leftShoulderAngle = Angle(degrees: 220)
-        let rightShoulderAngle = Angle(degrees: 320)
+        let leftShoulderAngle = Angle(degrees: AppConstants.UI.TacticalShapes.playerLeftShoulderAngleDegrees)
+        let rightShoulderAngle = Angle(degrees: AppConstants.UI.TacticalShapes.playerRightShoulderAngleDegrees)
         
         let rightShoulder = CGPoint(
             x: center.x + radius * CGFloat(cos(rightShoulderAngle.radians)),
             y: center.y + radius * CGFloat(sin(rightShoulderAngle.radians))
         )
+        let leftShoulder = CGPoint(
+            x: center.x + radius * CGFloat(cos(leftShoulderAngle.radians)),
+            y: center.y + radius * CGFloat(sin(leftShoulderAngle.radians))
+        )
         
         path.move(to: noseTip)
         path.addLine(to: rightShoulder)
-        // Arc around the base to the left shoulder
+        // Arc around the base (bottom) to the left shoulder in increasing angle direction
         path.addArc(
             center: center,
             radius: radius,
@@ -59,6 +63,7 @@ public struct SquadPlayerShape: Shape {
             endAngle: leftShoulderAngle,
             clockwise: false
         )
+        path.addLine(to: leftShoulder)
         path.addLine(to: noseTip)
         path.closeSubpath()
         
@@ -76,36 +81,40 @@ public struct SquadLeaderShape: Shape {
         let h = rect.height
         
         let center = CGPoint(x: w / 2, y: h / 2)
-        let radius = min(w, h) * 0.35
+        let radius = min(w, h) * AppConstants.UI.TacticalShapes.leaderRadiusFactor
         
         // Top forward pointy nose
         let noseTip = CGPoint(x: w / 2, y: 0)
-        let leftShoulder = CGPoint(x: center.x - radius * 0.9, y: center.y - radius * 0.4)
-        let rightShoulder = CGPoint(x: center.x + radius * 0.9, y: center.y - radius * 0.4)
+        
+        let rightShoulder = CGPoint(x: center.x + radius * AppConstants.UI.TacticalShapes.leaderShoulderOffsetRatio, y: center.y - radius * AppConstants.UI.TacticalShapes.leaderShoulderHeightRatio)
+        let rightWingOut = CGPoint(x: w * AppConstants.UI.TacticalShapes.leaderWingOuterRatio, y: center.y + radius * AppConstants.UI.TacticalShapes.leaderWingHeightRatio)
+        let rightWingIn = CGPoint(
+            x: center.x + radius * CGFloat(cos(Angle(degrees: AppConstants.UI.TacticalShapes.leaderInnerNotchAngle1Degrees).radians)),
+            y: center.y + radius * CGFloat(sin(Angle(degrees: AppConstants.UI.TacticalShapes.leaderInnerNotchAngle1Degrees).radians))
+        )
+        
+        let leftShoulder = CGPoint(x: center.x - radius * AppConstants.UI.TacticalShapes.leaderShoulderOffsetRatio, y: center.y - radius * AppConstants.UI.TacticalShapes.leaderShoulderHeightRatio)
+        let leftWingOut = CGPoint(x: w * (1.0 - AppConstants.UI.TacticalShapes.leaderWingOuterRatio), y: center.y + radius * AppConstants.UI.TacticalShapes.leaderWingHeightRatio)
+        let leftWingIn = CGPoint(
+            x: center.x + radius * CGFloat(cos(Angle(degrees: AppConstants.UI.TacticalShapes.leaderInnerNotchAngle2Degrees).radians)),
+            y: center.y + radius * CGFloat(sin(Angle(degrees: AppConstants.UI.TacticalShapes.leaderInnerNotchAngle2Degrees).radians))
+        )
         
         path.move(to: noseTip)
         path.addLine(to: rightShoulder)
-        
-        // Right SL chevron wing notch
-        let rightWingOut = CGPoint(x: w * 0.98, y: center.y + radius * 0.2)
-        let rightWingIn = CGPoint(
-            x: center.x + radius * CGFloat(cos(Angle(degrees: 30).radians)),
-            y: center.y + radius * CGFloat(sin(Angle(degrees: 30).radians))
-        )
         path.addLine(to: rightWingOut)
         path.addLine(to: rightWingIn)
         
-        // Bottom arc centered exactly at center of rect
+        // Bottom arc connecting the inner chevron notches (35° -> 90° -> 145°)
         path.addArc(
             center: center,
             radius: radius,
-            startAngle: Angle(degrees: 30),
-            endAngle: Angle(degrees: 150),
+            startAngle: Angle(degrees: AppConstants.UI.TacticalShapes.leaderInnerNotchAngle1Degrees),
+            endAngle: Angle(degrees: AppConstants.UI.TacticalShapes.leaderInnerNotchAngle2Degrees),
             clockwise: false
         )
         
-        // Left SL chevron wing notch
-        let leftWingOut = CGPoint(x: w * 0.02, y: center.y + radius * 0.2)
+        path.addLine(to: leftWingIn)
         path.addLine(to: leftWingOut)
         path.addLine(to: leftShoulder)
         path.addLine(to: noseTip)
@@ -115,7 +124,7 @@ public struct SquadLeaderShape: Shape {
     }
 }
 
-/// Vector shape for KIA / Dead player ("X" icon)
+/// Vector shape for KIA / Dead player ("X" icon) as a single continuous 12-point polygon
 public struct SquadDeadXShape: Shape {
     public init() {}
 
@@ -123,21 +132,30 @@ public struct SquadDeadXShape: Shape {
         var path = Path()
         let w = rect.width
         let h = rect.height
-        let strokeWidth = min(w, h) * 0.22
-        let inset = min(w, h) * 0.12
+        let cx = w / 2
+        let cy = h / 2
         
-        // Diagonal 1: Top-Left to Bottom-Right
-        path.move(to: CGPoint(x: inset, y: inset + strokeWidth * 0.5))
-        path.addLine(to: CGPoint(x: inset + strokeWidth * 0.5, y: inset))
-        path.addLine(to: CGPoint(x: w - inset, y: h - inset - strokeWidth * 0.5))
-        path.addLine(to: CGPoint(x: w - inset - strokeWidth * 0.5, y: h - inset))
-        path.closeSubpath()
+        let armLength = min(w, h) * AppConstants.UI.TacticalShapes.deadXArmLengthRatio
+        let halfThick = min(w, h) * AppConstants.UI.TacticalShapes.deadXHalfThicknessRatio
+        let sqrt2 = AppConstants.UI.TacticalShapes.sqrtTwo
         
-        // Diagonal 2: Top-Right to Bottom-Left
-        path.move(to: CGPoint(x: w - inset, y: inset + strokeWidth * 0.5))
-        path.addLine(to: CGPoint(x: w - inset - strokeWidth * 0.5, y: inset))
-        path.addLine(to: CGPoint(x: inset, y: h - inset - strokeWidth * 0.5))
-        path.addLine(to: CGPoint(x: inset + strokeWidth * 0.5, y: h - inset))
+        let lMinusT = (armLength - halfThick) / sqrt2
+        let lPlusT = (armLength + halfThick) / sqrt2
+        let tDiag = halfThick * sqrt2
+        
+        // 12 vertices of a single continuous "X" polygon
+        path.move(to: CGPoint(x: cx, y: cy - tDiag))                               // Top inner crook
+        path.addLine(to: CGPoint(x: cx + lMinusT, y: cy - lPlusT))                 // Top-Right arm top corner
+        path.addLine(to: CGPoint(x: cx + lPlusT, y: cy - lMinusT))                 // Top-Right arm right corner
+        path.addLine(to: CGPoint(x: cx + tDiag, y: cy))                            // Right inner crook
+        path.addLine(to: CGPoint(x: cx + lPlusT, y: cy + lMinusT))                 // Bottom-Right arm right corner
+        path.addLine(to: CGPoint(x: cx + lMinusT, y: cy + lPlusT))                 // Bottom-Right arm bottom corner
+        path.addLine(to: CGPoint(x: cx, y: cy + tDiag))                            // Bottom inner crook
+        path.addLine(to: CGPoint(x: cx - lMinusT, y: cy + lPlusT))                 // Bottom-Left arm bottom corner
+        path.addLine(to: CGPoint(x: cx - lPlusT, y: cy + lMinusT))                 // Bottom-Left arm left corner
+        path.addLine(to: CGPoint(x: cx - tDiag, y: cy))                            // Left inner crook
+        path.addLine(to: CGPoint(x: cx - lPlusT, y: cy - lMinusT))                 // Top-Left arm left corner
+        path.addLine(to: CGPoint(x: cx - lMinusT, y: cy - lPlusT))                 // Top-Left arm top corner
         path.closeSubpath()
         
         return path
@@ -160,22 +178,22 @@ public struct SquadPulseCore: View {
     // When BPM is 100, duration is 0.6s (1 beat); scaled by (60 / BPM)
     private var pulseDuration: Double {
         guard heartRate > 0 else { return 1.0 }
-        let clampedBpm = max(min(heartRate, 220.0), 30.0)
-        return 60.0 / clampedBpm
+        let clampedBpm = max(min(heartRate, AppConstants.Health.maxPulseBpm), AppConstants.Health.minPulseBpm)
+        return AppConstants.Timing.secondsPerMinute / clampedBpm
     }
     
     public var body: some View {
         ZStack {
             if heartRate > 0 {
-                // Expanding pulse ring
+                // Expanding pulse ring (breathing circle)
                 Circle()
-                    .stroke(tintColor.opacity(isPulsing ? 0.0 : 0.8), lineWidth: 1.5)
-                    .scaleEffect(isPulsing ? 1.9 : 0.8)
+                    .stroke(tintColor.opacity(isPulsing ? 0.0 : 0.8), lineWidth: 1.2)
+                    .scaleEffect(isPulsing ? 1.9 : 0.8, anchor: .center)
                 
-                // Solid center core dot
+                // Solid center core dot (player dot)
                 Circle()
                     .fill(tintColor)
-                    .scaleEffect(isPulsing ? 1.2 : 0.8)
+                    .scaleEffect(isPulsing ? 1.2 : 0.8, anchor: .center)
             }
         }
         .onAppear {
@@ -199,3 +217,97 @@ public struct SquadPulseCore: View {
         }
     }
 }
+
+/// Vector shape for ECG heartbeat pulse wave (or flatline when KIA / downed)
+public struct ECGWaveShape: Shape {
+    public var isFlatline: Bool
+    
+    public init(isFlatline: Bool = false) {
+        self.isFlatline = isFlatline
+    }
+    
+    public var animatableData: Double {
+        get { isFlatline ? 1.0 : 0.0 }
+        set { isFlatline = newValue >= 0.5 }
+    }
+    
+    public func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+        let midY = h / 2
+        
+        path.move(to: CGPoint(x: 0, y: midY))
+        
+        if isFlatline {
+            path.addLine(to: CGPoint(x: w, y: midY))
+        } else {
+            // ECG pulse wave: baseline -> P wave -> Q dip -> R peak -> S dip -> T wave -> baseline
+            path.addLine(to: CGPoint(x: w * AppConstants.UI.TacticalShapes.ECG.pWaveStart, y: midY))
+            path.addLine(to: CGPoint(x: w * AppConstants.UI.TacticalShapes.ECG.pWavePeak, y: midY - h * AppConstants.UI.TacticalShapes.ECG.pWaveHeightRatio))
+            path.addLine(to: CGPoint(x: w * AppConstants.UI.TacticalShapes.ECG.pWaveEnd, y: midY))
+            path.addLine(to: CGPoint(x: w * AppConstants.UI.TacticalShapes.ECG.qDip, y: midY + h * AppConstants.UI.TacticalShapes.ECG.qDipDepthRatio))
+            path.addLine(to: CGPoint(x: w * AppConstants.UI.TacticalShapes.ECG.rPeak, y: midY - h * AppConstants.UI.TacticalShapes.ECG.rPeakHeightRatio))
+            path.addLine(to: CGPoint(x: w * AppConstants.UI.TacticalShapes.ECG.sDip, y: midY + h * AppConstants.UI.TacticalShapes.ECG.sDipDepthRatio))
+            path.addLine(to: CGPoint(x: w * AppConstants.UI.TacticalShapes.ECG.tWaveStart, y: midY))
+            path.addLine(to: CGPoint(x: w * AppConstants.UI.TacticalShapes.ECG.tWavePeak, y: midY - h * AppConstants.UI.TacticalShapes.ECG.tWaveHeightRatio))
+            path.addLine(to: CGPoint(x: w * AppConstants.UI.TacticalShapes.ECG.tWaveEnd, y: midY))
+            path.addLine(to: CGPoint(x: w, y: midY))
+        }
+        
+        return path
+    }
+    
+    /// Computes (x, y) point on the ECG curve for a normalized progress in [0, 1]
+    public static func point(at progress: CGFloat, in size: CGSize, isFlatline: Bool = false) -> CGPoint {
+        let t = min(max(progress, 0.0), 1.0)
+        let midY = size.height / 2.0
+        let x = t * size.width
+        if isFlatline {
+            return CGPoint(x: x, y: midY)
+        }
+        let h = size.height
+        
+        let y: CGFloat
+        let ecg = AppConstants.UI.TacticalShapes.ECG.self
+        if t < ecg.pWaveStart {
+            y = midY
+        } else if t < ecg.pWavePeak {
+            let frac = (t - ecg.pWaveStart) / (ecg.pWavePeak - ecg.pWaveStart)
+            y = midY - (h * ecg.pWaveHeightRatio) * frac
+        } else if t < ecg.pWaveEnd {
+            let frac = (t - ecg.pWavePeak) / (ecg.pWaveEnd - ecg.pWavePeak)
+            y = (midY - h * ecg.pWaveHeightRatio) + (h * ecg.pWaveHeightRatio) * frac
+        } else if t < ecg.qDip {
+            let frac = (t - ecg.pWaveEnd) / (ecg.qDip - ecg.pWaveEnd)
+            y = midY + (h * ecg.qDipDepthRatio) * frac
+        } else if t < ecg.rPeak {
+            let frac = (t - ecg.qDip) / (ecg.rPeak - ecg.qDip)
+            let startY = midY + h * ecg.qDipDepthRatio
+            let endY = midY - h * ecg.rPeakHeightRatio
+            y = startY + (endY - startY) * frac
+        } else if t < ecg.sDip {
+            let frac = (t - ecg.rPeak) / (ecg.sDip - ecg.rPeak)
+            let startY = midY - h * ecg.rPeakHeightRatio
+            let endY = midY + h * ecg.sDipDepthRatio
+            y = startY + (endY - startY) * frac
+        } else if t < ecg.tWaveStart {
+            let frac = (t - ecg.sDip) / (ecg.tWaveStart - ecg.sDip)
+            let startY = midY + h * ecg.sDipDepthRatio
+            let endY = midY
+            y = startY + (endY - startY) * frac
+        } else if t < ecg.tWavePeak {
+            let frac = (t - ecg.tWaveStart) / (ecg.tWavePeak - ecg.tWaveStart)
+            let startY = midY - h * ecg.tWaveHeightRatio
+            let endY = midY
+            y = startY + (endY - startY) * frac
+        } else if t < ecg.tWaveEnd {
+            let frac = (t - ecg.tWavePeak) / (ecg.tWaveEnd - ecg.tWavePeak)
+            y = (midY - h * ecg.tWaveHeightRatio) + (h * ecg.tWaveHeightRatio) * frac
+        } else {
+            y = midY
+        }
+        return CGPoint(x: x, y: y)
+    }
+}
+

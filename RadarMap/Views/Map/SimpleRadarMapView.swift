@@ -3,48 +3,33 @@ import CoreLocation
 
 public struct SimpleRadarMapView: View {
     @EnvironmentObject var gameState: GameStateManager
-    @Binding var currentScaleText: String
-    @Binding var centerTrigger: Int
     
-    // Zoom and Pan State
-    @State private var radarScaleMeters: Double = 100.0 // Radius in meters
+    // Pan State
     @State private var dragOffset: CGSize = .zero
-    @State private var accumulatedOffset: CGSize = .zero
-    @State private var baseScale: Double = 100.0
+    @State private var baseScale: Double = AppConstants.UI.RadarScale.defaultScaleMeters
     
-    public init(currentScaleText: Binding<String>, centerTrigger: Binding<Int> = .constant(0)) {
-        self._currentScaleText = currentScaleText
-        self._centerTrigger = centerTrigger
-    }
+    public init() {}
     
-    private var squadMembers: [SquadMember] {
+    private var otherSquadMembers: [SquadMember] {
         guard let room = gameState.firebaseManager.activeRoom else { return [] }
-        return Array(room.members.values)
-    }
-    
-    private var userCoordinate: CLLocationCoordinate2D {
-        if let loc = gameState.locationHeadingManager.userLocation?.coordinate {
-            return loc
-        }
-        if let myMember = gameState.firebaseManager.activeRoom?.members[gameState.myMemberId] {
-            return myMember.coordinate
-        }
-        return CLLocationCoordinate2D(latitude: 37.785834, longitude: -122.406417)
-    }
-    
-    private var userHeading: Double {
-        gameState.locationHeadingManager.userHeading?.trueHeading ?? 0.0
+        return room.members.values.filter { $0.id != gameState.myMemberId }
     }
     
     public var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
             let screenCenter = CGPoint(x: size.width / 2, y: size.height / 2)
-            let mapCenter = CGPoint(
-                x: screenCenter.x + accumulatedOffset.width + dragOffset.width,
-                y: screenCenter.y + accumulatedOffset.height + dragOffset.height
+            let meMember = gameState.localPlayerMember
+            let centerCoord = gameState.currentMapCenter ?? meMember.coordinate
+            let centerPoint = CGPoint(
+                x: screenCenter.x + dragOffset.width,
+                y: screenCenter.y + dragOffset.height
             )
-            let maxRadius = min(size.width, size.height) * 0.44
+            let maxRadius = min(size.width, size.height) * AppConstants.UI.RadarScale.radarRadiusRatio
+            
+            let metersPerDegreeLat = AppConstants.Location.metersPerDegreeLatitude
+            let metersPerDegreeLon = metersPerDegreeLat * cos(centerCoord.latitude * AppConstants.Location.degreesToRadiansFactor)
+            let pointsPerMeter = gameState.radarScaleMeters > 0 ? Double(maxRadius) / gameState.radarScaleMeters : 1.0
             
             ZStack {
                 // Maximum Black Background for OLED Power Conservation
@@ -54,7 +39,7 @@ public struct SimpleRadarMapView: View {
                 let themeColor = gameState.radarColorTheme.color
                 
                 // Concentric Tactical Range Rings (Red or Green)
-                ForEach([0.25, 0.50, 0.75, 1.0], id: \.self) { ratio in
+                ForEach(AppConstants.UI.RadarScale.rangeRingRatios, id: \.self) { ratio in
                     Circle()
                         .stroke(
                             ratio == 1.0 ? themeColor.opacity(0.85) : themeColor.opacity(0.4),
@@ -66,7 +51,7 @@ public struct SimpleRadarMapView: View {
                 
                 // Full Diameter Crosshair (+)
                 Path { path in
-                    let length = maxRadius * 1.05
+                    let length = maxRadius * AppConstants.UI.RadarScale.crosshairExtensionRatio
                     // Horizontal axis
                     path.move(to: CGPoint(x: screenCenter.x - length, y: screenCenter.y))
                     path.addLine(to: CGPoint(x: screenCenter.x + length, y: screenCenter.y))
@@ -78,7 +63,7 @@ public struct SimpleRadarMapView: View {
                 
                 // Bold Center '+' Reticle
                 Path { path in
-                    let plusSize: CGFloat = 9
+                    let plusSize: CGFloat = CGFloat(AppConstants.UI.RadarScale.centerReticleSize)
                     path.move(to: CGPoint(x: screenCenter.x - plusSize, y: screenCenter.y))
                     path.addLine(to: CGPoint(x: screenCenter.x + plusSize, y: screenCenter.y))
                     path.move(to: CGPoint(x: screenCenter.x, y: screenCenter.y - plusSize))
@@ -87,150 +72,135 @@ public struct SimpleRadarMapView: View {
                 .stroke(themeColor, lineWidth: 2.0)
                 
                 // Range Ring Distance Labels
-                ForEach([0.25, 0.50, 0.75, 1.0], id: \.self) { ratio in
-                    let ringDist = radarScaleMeters * ratio
-                    Text(formatDistance(meters: ringDist))
+                ForEach(AppConstants.UI.RadarScale.rangeRingRatios, id: \.self) { ratio in
+                    let ringDist = gameState.radarScaleMeters * ratio
+                    Text(AppConstants.UI.ScaleRuler.formatDistance(meters: ringDist))
                         .font(.system(size: 8, weight: .bold, design: .monospaced))
                         .foregroundColor(themeColor.opacity(0.8))
                         .position(x: screenCenter.x + 18, y: screenCenter.y - (maxRadius * ratio) + 6)
                 }
                 
-                // Active Squad Members
-                ForEach(squadMembers) { member in
-                    let isMe = member.id == gameState.myMemberId
-                    let offset = pointOffset(for: member.coordinate, userCoord: userCoordinate, maxRadius: maxRadius, rangeMeters: radarScaleMeters)
+                // Active Remote Squad Members (Smooth 60 FPS Gliding & Rotation)
+                ForEach(otherSquadMembers, id: \.id) { member in
+                    let smoothed = gameState.deadReckoningEngine.smoothedMember(for: member)
+                    let offset = pointOffset(for: smoothed.coordinate, centerCoord: centerCoord, metersPerDegreeLat: metersPerDegreeLat, metersPerDegreeLon: metersPerDegreeLon, pointsPerMeter: pointsPerMeter)
                     
-                    MemberAnnotationView(member: member, isMe: isMe)
-                        .position(x: mapCenter.x + offset.x, y: mapCenter.y + offset.y)
-                        .animation(.easeInOut(duration: 0.35), value: member.coordinate.latitude)
-                        .animation(.easeInOut(duration: 0.35), value: member.coordinate.longitude)
-                        .animation(.easeInOut(duration: 0.35), value: member.heading)
+                    MemberAnnotationView(
+                        member: smoothed,
+                        isMe: false,
+                        radarColor: themeColor
+                    )
+                        .position(x: centerPoint.x + offset.x, y: centerPoint.y + offset.y)
                 }
                 
-                // If local user is solo/host without squad list, render center operator arrow blip
-                if !squadMembers.contains(where: { $0.id == gameState.myMemberId }) {
-                    let myHr = gameState.healthKitManager.currentHeartRate > 0 ? gameState.healthKitManager.currentHeartRate : 75.0
-                    let themeColor = gameState.radarColorTheme.color
+                // Active Tactical Indicators (Orders & Enemy markers)
+                ForEach(gameState.allTacticalIndicators) { indicator in
+                    let offset = pointOffset(for: indicator.coordinate, centerCoord: centerCoord, metersPerDegreeLat: metersPerDegreeLat, metersPerDegreeLon: metersPerDegreeLon, pointsPerMeter: pointsPerMeter)
                     
-                    ZStack {
-                        SquadPlayerShape()
-                            .fill(themeColor)
-                            .overlay(
-                                SquadPlayerShape()
-                                    .stroke(Color.white, lineWidth: 1.2)
-                            )
-                            .frame(width: 20, height: 20)
-                            .rotationEffect(.degrees(userHeading))
-                            .overlay(
-                                SquadPulseCore(heartRate: myHr, tintColor: .white)
-                                    .frame(width: 6, height: 6)
-                            )
-                    }
-                    .position(mapCenter)
+                    TacticalIndicatorOverlayView(
+                        indicator: indicator,
+                        radarColor: themeColor,
+                        onDelete: {
+                            gameState.removeTacticalIndicator(id: indicator.id)
+                        }
+                    )
+                    .position(x: centerPoint.x + offset.x, y: centerPoint.y + offset.y)
+                    .zIndex(5)
                 }
+                
+                // Local Player "Me" Indicator (Always live position + live COD blended heading)
+                let meOffset = pointOffset(for: meMember.coordinate, centerCoord: centerCoord, metersPerDegreeLat: metersPerDegreeLat, metersPerDegreeLon: metersPerDegreeLon, pointsPerMeter: pointsPerMeter)
+                MemberAnnotationView(
+                    member: meMember,
+                    isMe: true,
+                    radarColor: themeColor
+                )
+                .position(x: centerPoint.x + meOffset.x, y: centerPoint.y + meOffset.y)
             }
             .contentShape(Rectangle())
+            .onTapGesture { location in
+                if gameState.pendingIndicatorPlacementType != nil {
+                    let tappedCoord = coordinate(
+                        for: location,
+                        centerScreenPoint: centerPoint,
+                        centerCoord: centerCoord,
+                        metersPerDegreeLat: metersPerDegreeLat,
+                        metersPerDegreeLon: metersPerDegreeLon,
+                        pointsPerMeter: pointsPerMeter
+                    )
+                    gameState.placeTacticalIndicator(at: tappedCoord)
+                }
+            }
             .gesture(
                 DragGesture()
                     .onChanged { value in
                         dragOffset = value.translation
                     }
                     .onEnded { value in
-                        accumulatedOffset.width += value.translation.width
-                        accumulatedOffset.height += value.translation.height
+                        let endCenter = coordinate(
+                            for: CGPoint(x: screenCenter.x - value.translation.width, y: screenCenter.y - value.translation.height),
+                            centerScreenPoint: screenCenter,
+                            centerCoord: centerCoord,
+                            metersPerDegreeLat: metersPerDegreeLat,
+                            metersPerDegreeLon: metersPerDegreeLon,
+                            pointsPerMeter: pointsPerMeter
+                        )
+                        gameState.currentMapCenter = endCenter
                         dragOffset = .zero
                     }
             )
-            #if os(watchOS)
-            .focusable()
-            .digitalCrownRotation(
-                $radarScaleMeters,
-                from: 10.0,
-                through: 5000.0,
-                by: 10.0,
-                sensitivity: .medium,
-                isContinuous: false,
-                isHapticFeedbackEnabled: true
-            )
-            .onChange(of: radarScaleMeters) { _, _ in
-                updateScaleText(maxRadius: maxRadius)
-            }
-            #else
+            #if !os(watchOS)
             .gesture(
                 MagnificationGesture()
                     .onChanged { scale in
                         let newScale = baseScale / scale
-                        radarScaleMeters = min(max(newScale, 10.0), 20000.0)
-                        updateScaleText(maxRadius: maxRadius)
+                        gameState.radarScaleMeters = min(max(newScale, AppConstants.UI.RadarScale.minScaleMeters), AppConstants.UI.RadarScale.maxiOSScaleMeters)
                     }
                     .onEnded { _ in
-                        baseScale = radarScaleMeters
+                        baseScale = gameState.radarScaleMeters
                     }
             )
             #endif
-            .onChange(of: centerTrigger) { _, _ in
+            .onChange(of: gameState.radarCenterTrigger) { _, _ in
                 withAnimation(.easeInOut(duration: 0.25)) {
-                    accumulatedOffset = .zero
                     dragOffset = .zero
+                    baseScale = AppConstants.UI.RadarScale.defaultScaleMeters
                 }
             }
             .onAppear {
-                updateScaleText(maxRadius: maxRadius)
+                baseScale = gameState.radarScaleMeters
             }
         }
     }
     
-    private func pointOffset(for target: CLLocationCoordinate2D, userCoord: CLLocationCoordinate2D, maxRadius: CGFloat, rangeMeters: Double) -> CGPoint {
-        let dLat = target.latitude - userCoord.latitude
-        let dLon = target.longitude - userCoord.longitude
+    private func pointOffset(for target: CLLocationCoordinate2D, centerCoord: CLLocationCoordinate2D, metersPerDegreeLat: Double, metersPerDegreeLon: Double, pointsPerMeter: Double) -> CGPoint {
+        let dLat = target.latitude - centerCoord.latitude
+        let dLon = target.longitude - centerCoord.longitude
         
-        let metersNorth = dLat * 111_139.0
-        let metersEast = dLon * (111_139.0 * cos(userCoord.latitude * .pi / 180.0))
+        let metersEast = dLon * metersPerDegreeLon
+        let metersNorth = dLat * metersPerDegreeLat
         
-        let pointsPerMeter = Double(maxRadius) / rangeMeters
         let x = CGFloat(metersEast * pointsPerMeter)
         let y = CGFloat(-metersNorth * pointsPerMeter)
         
         return CGPoint(x: x, y: y)
     }
     
-    private func formatDistance(meters: Double) -> String {
-        if meters < 1000 {
-            return "\(Int(round(meters)))m"
-        } else {
-            let km = meters / 1000.0
-            return String(format: "%.1fkm", km)
-        }
-    }
-    
-    private func updateScaleText(maxRadius: CGFloat) {
-        guard maxRadius > 0 else { return }
-        let rulerWidthPoints: Double = 40.0
-        let rulerMeters = rulerWidthPoints * (radarScaleMeters / Double(maxRadius))
-        currentScaleText = formatRulerDistance(meters: rulerMeters)
-    }
-    
-    private func formatRulerDistance(meters: Double) -> String {
-        if meters < 18 {
-            return "10m"
-        } else if meters < 38 {
-            return "25m"
-        } else if meters < 75 {
-            return "50m"
-        } else if meters < 150 {
-            return "100m"
-        } else if meters < 350 {
-            return "250m"
-        } else if meters < 750 {
-            return "500m"
-        } else if meters < 1500 {
-            return "1km"
-        } else if meters < 3500 {
-            return "2.5km"
-        } else if meters < 7500 {
-            return "5km"
-        } else {
-            return "\(max(1, Int(round(meters / 1000.0))))km"
-        }
+    private func coordinate(for screenPoint: CGPoint, centerScreenPoint: CGPoint, centerCoord: CLLocationCoordinate2D, metersPerDegreeLat: Double, metersPerDegreeLon: Double, pointsPerMeter: Double) -> CLLocationCoordinate2D {
+        let dx = screenPoint.x - centerScreenPoint.x
+        let dy = screenPoint.y - centerScreenPoint.y
+        
+        guard pointsPerMeter > 0 else { return centerCoord }
+        
+        let metersEast = Double(dx) / pointsPerMeter
+        let metersNorth = Double(-dy) / pointsPerMeter
+        
+        let latDelta = metersNorth / metersPerDegreeLat
+        let lonDelta = metersEast / metersPerDegreeLon
+        
+        return CLLocationCoordinate2D(
+            latitude: centerCoord.latitude + latDelta,
+            longitude: centerCoord.longitude + lonDelta
+        )
     }
 }

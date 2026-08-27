@@ -35,10 +35,10 @@ public struct SquadLobbyView: View {
                                 
                                 Spacer()
                                 
-                                if room.isBluetoothAdvertising {
-                                    Label("BLE ON", systemImage: "antenna.radiowaves.left.and.right")
+                                if room.hasPin {
+                                    Label("PIN", systemImage: "lock.fill")
                                         .font(.system(size: 8, weight: .semibold))
-                                        .foregroundColor(.cyan)
+                                        .foregroundColor(.yellow)
                                 }
                             }
                         }
@@ -104,7 +104,7 @@ public struct SquadLobbyView: View {
                         }
                     }
                     
-                    // Leave Room Button
+                    // Disband / Leave Room Button
                     Section {
                         Button(role: .destructive, action: {
                             gameState.leaveCurrentRoom()
@@ -112,7 +112,9 @@ public struct SquadLobbyView: View {
                         }) {
                             HStack {
                                 Spacer()
-                                Text("Leave Squad")
+                                Image(systemName: gameState.isCurrentMemberHost ? "xmark.circle.fill" : "rectangle.portrait.and.arrow.right")
+                                    .foregroundColor(.red)
+                                Text(gameState.isCurrentMemberHost ? "Disband Squad" : "Logout / Leave Squad")
                                     .font(.system(size: 11, weight: .semibold))
                                     .foregroundColor(.red)
                                 Spacer()

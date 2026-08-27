@@ -7,60 +7,117 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2A0000020000000000000001 /* RadarMap Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 1A0000010000000000000001 /* RadarMap Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		2F0000030000000000000002 /* Resources/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FF0000030000000000000001 /* Resources/Assets.xcassets */; };
+		2F0001000000000000000002 /* RadarMapCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F0001000000000000000001 /* RadarMapCompanionApp.swift */; };
+		FF0000030000000000000002 /* Resources/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FF0000030000000000000001 /* Resources/Assets.xcassets */; };
 		FF0001000000000000000002 /* RadarMapApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001000000000000000001 /* RadarMapApp.swift */; };
-		FF0001010000000000000002 /* SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001010000000000000001 /* SubscriptionManager.swift */; };
-		FF0001020000000000000002 /* FirebaseSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001020000000000000001 /* FirebaseSyncManager.swift */; };
-		FF0001030000000000000002 /* LocationHeadingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001030000000000000001 /* LocationHeadingManager.swift */; };
-		FF0001040000000000000002 /* GameStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001040000000000000001 /* GameStateManager.swift */; };
-		FF0001050000000000000002 /* BluetoothDiscoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001050000000000000001 /* BluetoothDiscoveryManager.swift */; };
-		FF0001060000000000000002 /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001060000000000000001 /* HealthKitManager.swift */; };
-		FF0001070000000000000002 /* RadarColorTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001070000000000000001 /* RadarColorTheme.swift */; };
-		FF0001080000000000000002 /* TelemetryPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001080000000000000001 /* TelemetryPacket.swift */; };
-		FF0001090000000000000002 /* SquadMember.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001090000000000000001 /* SquadMember.swift */; };
-		FF0001100000000000000002 /* SquadRoom.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001100000000000000001 /* SquadRoom.swift */; };
-		FF0001110000000000000002 /* TacticalMapStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001110000000000000001 /* TacticalMapStyle.swift */; };
-		FF0001120000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001120000000000000001 /* ContentView.swift */; };
-		FF0001130000000000000002 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001130000000000000001 /* SettingsView.swift */; };
-		FF0001140000000000000002 /* RoomDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001140000000000000001 /* RoomDiscoveryView.swift */; };
-		FF0001150000000000000002 /* CreateRoomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001150000000000000001 /* CreateRoomView.swift */; };
-		FF0001160000000000000002 /* SquadLobbyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001160000000000000001 /* SquadLobbyView.swift */; };
-		FF0001170000000000000002 /* MemberAnnotationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001170000000000000001 /* MemberAnnotationView.swift */; };
-		FF0001180000000000000002 /* TacticalRadarMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001180000000000000001 /* TacticalRadarMapView.swift */; };
-		FF0001190000000000000002 /* SquadTacticalIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001190000000000000001 /* SquadTacticalIcons.swift */; };
-		FF0001200000000000000002 /* SimpleRadarMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001200000000000000001 /* SimpleRadarMapView.swift */; };
-		FF0001210000000000000002 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001210000000000000001 /* PaywallView.swift */; };
+		FF0001010000000000000002 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001010000000000000001 /* AppConstants.swift */; };
+		FF0001020000000000000002 /* Managers/SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001020000000000000001 /* Managers/SubscriptionManager.swift */; };
+		FF0001030000000000000002 /* Managers/FirebaseSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001030000000000000001 /* Managers/FirebaseSyncManager.swift */; };
+		FF0001040000000000000002 /* Managers/DeadReckoningEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001040000000000000001 /* Managers/DeadReckoningEngine.swift */; };
+		FF0001050000000000000002 /* Managers/LocationHeadingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001050000000000000001 /* Managers/LocationHeadingManager.swift */; };
+		FF0001060000000000000002 /* Managers/GameStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001060000000000000001 /* Managers/GameStateManager.swift */; };
+		FF0001070000000000000002 /* Managers/BluetoothDiscoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001070000000000000001 /* Managers/BluetoothDiscoveryManager.swift */; };
+		FF0001080000000000000002 /* Managers/HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001080000000000000001 /* Managers/HealthKitManager.swift */; };
+		FF0001090000000000000002 /* Managers/NetworkQualityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001090000000000000001 /* Managers/NetworkQualityMonitor.swift */; };
+		FF0001100000000000000002 /* Models/RadarColorTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001100000000000000001 /* Models/RadarColorTheme.swift */; };
+		FF0001110000000000000002 /* Models/TelemetryPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001110000000000000001 /* Models/TelemetryPacket.swift */; };
+		FF0001120000000000000002 /* Models/SquadMember.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001120000000000000001 /* Models/SquadMember.swift */; };
+		FF0001130000000000000002 /* Models/TacticalIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001130000000000000001 /* Models/TacticalIndicator.swift */; };
+		FF0001140000000000000002 /* Models/SquadRoom.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001140000000000000001 /* Models/SquadRoom.swift */; };
+		FF0001150000000000000002 /* Models/TacticalMapStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001150000000000000001 /* Models/TacticalMapStyle.swift */; };
+		FF0001160000000000000002 /* Views/ModelPresentationExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001160000000000000001 /* Views/ModelPresentationExtensions.swift */; };
+		FF0001170000000000000002 /* Views/ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001170000000000000001 /* Views/ContentView.swift */; };
+		FF0001180000000000000002 /* Views/Settings/SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001180000000000000001 /* Views/Settings/SettingsView.swift */; };
+		FF0001190000000000000002 /* Views/Settings/PolicyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001190000000000000001 /* Views/Settings/PolicyView.swift */; };
+		FF0001200000000000000002 /* Views/Room/RoomDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001200000000000000001 /* Views/Room/RoomDiscoveryView.swift */; };
+		FF0001210000000000000002 /* Views/Room/CreateRoomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001210000000000000001 /* Views/Room/CreateRoomView.swift */; };
+		FF0001220000000000000002 /* Views/Room/SquadLobbyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001220000000000000001 /* Views/Room/SquadLobbyView.swift */; };
+		FF0001230000000000000002 /* Views/Map/MemberAnnotationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001230000000000000001 /* Views/Map/MemberAnnotationView.swift */; };
+		FF0001240000000000000002 /* Views/Map/TacticalIndicatorOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001240000000000000001 /* Views/Map/TacticalIndicatorOverlayView.swift */; };
+		FF0001250000000000000002 /* Views/Map/TacticalRadarMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001250000000000000001 /* Views/Map/TacticalRadarMapView.swift */; };
+		FF0001260000000000000002 /* Views/Map/TacticalIndicatorMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001260000000000000001 /* Views/Map/TacticalIndicatorMenuView.swift */; };
+		FF0001270000000000000002 /* Views/Map/SquadTacticalIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001270000000000000001 /* Views/Map/SquadTacticalIcons.swift */; };
+		FF0001280000000000000002 /* Views/Map/SimpleRadarMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001280000000000000001 /* Views/Map/SimpleRadarMapView.swift */; };
+		FF0001290000000000000002 /* Views/Paywall/PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001290000000000000001 /* Views/Paywall/PaywallView.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		2A0000030000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1A0000090000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1A0000060000000000000001;
+			remoteInfo = "RadarMap Watch App";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2A0000040000000000000001 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				2A0000020000000000000001 /* RadarMap Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
-		1A0000010000000000000001 /* RadarMap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "RadarMap.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		FF0001000000000000000001 /* RadarMapApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RadarMapApp.swift"; sourceTree = "<group>"; };
-		FF0001010000000000000001 /* SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Managers/SubscriptionManager.swift"; sourceTree = "<group>"; };
-		FF0001020000000000000001 /* FirebaseSyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Managers/FirebaseSyncManager.swift"; sourceTree = "<group>"; };
-		FF0001030000000000000001 /* LocationHeadingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Managers/LocationHeadingManager.swift"; sourceTree = "<group>"; };
-		FF0001040000000000000001 /* GameStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Managers/GameStateManager.swift"; sourceTree = "<group>"; };
-		FF0001050000000000000001 /* BluetoothDiscoveryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Managers/BluetoothDiscoveryManager.swift"; sourceTree = "<group>"; };
-		FF0001060000000000000001 /* HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Managers/HealthKitManager.swift"; sourceTree = "<group>"; };
-		FF0001070000000000000001 /* RadarColorTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/RadarColorTheme.swift"; sourceTree = "<group>"; };
-		FF0001080000000000000001 /* TelemetryPacket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/TelemetryPacket.swift"; sourceTree = "<group>"; };
-		FF0001090000000000000001 /* SquadMember.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/SquadMember.swift"; sourceTree = "<group>"; };
-		FF0001100000000000000001 /* SquadRoom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/SquadRoom.swift"; sourceTree = "<group>"; };
-		FF0001110000000000000001 /* TacticalMapStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/TacticalMapStyle.swift"; sourceTree = "<group>"; };
-		FF0001120000000000000001 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/ContentView.swift"; sourceTree = "<group>"; };
-		FF0001130000000000000001 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Settings/SettingsView.swift"; sourceTree = "<group>"; };
-		FF0001140000000000000001 /* RoomDiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Room/RoomDiscoveryView.swift"; sourceTree = "<group>"; };
-		FF0001150000000000000001 /* CreateRoomView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Room/CreateRoomView.swift"; sourceTree = "<group>"; };
-		FF0001160000000000000001 /* SquadLobbyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Room/SquadLobbyView.swift"; sourceTree = "<group>"; };
-		FF0001170000000000000001 /* MemberAnnotationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Map/MemberAnnotationView.swift"; sourceTree = "<group>"; };
-		FF0001180000000000000001 /* TacticalRadarMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Map/TacticalRadarMapView.swift"; sourceTree = "<group>"; };
-		FF0001190000000000000001 /* SquadTacticalIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Map/SquadTacticalIcons.swift"; sourceTree = "<group>"; };
-		FF0001200000000000000001 /* SimpleRadarMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Map/SimpleRadarMapView.swift"; sourceTree = "<group>"; };
-		FF0001210000000000000001 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Paywall/PaywallView.swift"; sourceTree = "<group>"; };
-		FF0000010000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Resources/Info.plist"; sourceTree = "<group>"; };
-		FF0000020000000000000001 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Resources/GoogleService-Info.plist"; sourceTree = "<group>"; };
+		1A0000010000000000000001 /* RadarMap Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "RadarMap Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A0000010000000000000001 /* RadarMap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RadarMap.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2F0000010000000000000001 /* Resources/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Resources/Info.plist; sourceTree = "<group>"; };
+		2F0000040000000000000001 /* Resources/RadarMapCompanion.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Resources/RadarMapCompanion.entitlements; sourceTree = "<group>"; };
+		2F0001000000000000000001 /* RadarMapCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadarMapCompanionApp.swift; sourceTree = "<group>"; };
+		FF0000010000000000000001 /* Resources/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Resources/Info.plist; sourceTree = "<group>"; };
+		FF0000020000000000000001 /* Resources/GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Resources/GoogleService-Info.plist"; sourceTree = "<group>"; };
+		FF0000030000000000000001 /* Resources/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
+		FF0000040000000000000001 /* Resources/RadarMapWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Resources/RadarMapWatch.entitlements; sourceTree = "<group>"; };
+		FF0001000000000000000001 /* RadarMapApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadarMapApp.swift; sourceTree = "<group>"; };
+		FF0001010000000000000001 /* AppConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConstants.swift; sourceTree = "<group>"; };
+		FF0001020000000000000001 /* Managers/SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/SubscriptionManager.swift; sourceTree = "<group>"; };
+		FF0001030000000000000001 /* Managers/FirebaseSyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/FirebaseSyncManager.swift; sourceTree = "<group>"; };
+		FF0001040000000000000001 /* Managers/DeadReckoningEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/DeadReckoningEngine.swift; sourceTree = "<group>"; };
+		FF0001050000000000000001 /* Managers/LocationHeadingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/LocationHeadingManager.swift; sourceTree = "<group>"; };
+		FF0001060000000000000001 /* Managers/GameStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/GameStateManager.swift; sourceTree = "<group>"; };
+		FF0001070000000000000001 /* Managers/BluetoothDiscoveryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/BluetoothDiscoveryManager.swift; sourceTree = "<group>"; };
+		FF0001080000000000000001 /* Managers/HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/HealthKitManager.swift; sourceTree = "<group>"; };
+		FF0001090000000000000001 /* Managers/NetworkQualityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/NetworkQualityMonitor.swift; sourceTree = "<group>"; };
+		FF0001100000000000000001 /* Models/RadarColorTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/RadarColorTheme.swift; sourceTree = "<group>"; };
+		FF0001110000000000000001 /* Models/TelemetryPacket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/TelemetryPacket.swift; sourceTree = "<group>"; };
+		FF0001120000000000000001 /* Models/SquadMember.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/SquadMember.swift; sourceTree = "<group>"; };
+		FF0001130000000000000001 /* Models/TacticalIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/TacticalIndicator.swift; sourceTree = "<group>"; };
+		FF0001140000000000000001 /* Models/SquadRoom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/SquadRoom.swift; sourceTree = "<group>"; };
+		FF0001150000000000000001 /* Models/TacticalMapStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/TacticalMapStyle.swift; sourceTree = "<group>"; };
+		FF0001160000000000000001 /* Views/ModelPresentationExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/ModelPresentationExtensions.swift; sourceTree = "<group>"; };
+		FF0001170000000000000001 /* Views/ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/ContentView.swift; sourceTree = "<group>"; };
+		FF0001180000000000000001 /* Views/Settings/SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Settings/SettingsView.swift; sourceTree = "<group>"; };
+		FF0001190000000000000001 /* Views/Settings/PolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Settings/PolicyView.swift; sourceTree = "<group>"; };
+		FF0001200000000000000001 /* Views/Room/RoomDiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Room/RoomDiscoveryView.swift; sourceTree = "<group>"; };
+		FF0001210000000000000001 /* Views/Room/CreateRoomView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Room/CreateRoomView.swift; sourceTree = "<group>"; };
+		FF0001220000000000000001 /* Views/Room/SquadLobbyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Room/SquadLobbyView.swift; sourceTree = "<group>"; };
+		FF0001230000000000000001 /* Views/Map/MemberAnnotationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Map/MemberAnnotationView.swift; sourceTree = "<group>"; };
+		FF0001240000000000000001 /* Views/Map/TacticalIndicatorOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Map/TacticalIndicatorOverlayView.swift; sourceTree = "<group>"; };
+		FF0001250000000000000001 /* Views/Map/TacticalRadarMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Map/TacticalRadarMapView.swift; sourceTree = "<group>"; };
+		FF0001260000000000000001 /* Views/Map/TacticalIndicatorMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Map/TacticalIndicatorMenuView.swift; sourceTree = "<group>"; };
+		FF0001270000000000000001 /* Views/Map/SquadTacticalIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Map/SquadTacticalIcons.swift; sourceTree = "<group>"; };
+		FF0001280000000000000001 /* Views/Map/SimpleRadarMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Map/SimpleRadarMapView.swift; sourceTree = "<group>"; };
+		FF0001290000000000000001 /* Views/Paywall/PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Paywall/PaywallView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		1A0000020000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A0000050000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -73,6 +130,7 @@
 		1A0000030000000000000001 = {
 			isa = PBXGroup;
 			children = (
+				2A0000060000000000000001 /* RadarMapCompanion */,
 				1A0000040000000000000001 /* RadarMap */,
 				1A0000050000000000000001 /* Products */,
 			);
@@ -82,29 +140,39 @@
 			isa = PBXGroup;
 			children = (
 				FF0001000000000000000001 /* RadarMapApp.swift */,
-				FF0001010000000000000001 /* SubscriptionManager.swift */,
-				FF0001020000000000000001 /* FirebaseSyncManager.swift */,
-				FF0001030000000000000001 /* LocationHeadingManager.swift */,
-				FF0001040000000000000001 /* GameStateManager.swift */,
-				FF0001050000000000000001 /* BluetoothDiscoveryManager.swift */,
-				FF0001060000000000000001 /* HealthKitManager.swift */,
-				FF0001070000000000000001 /* RadarColorTheme.swift */,
-				FF0001080000000000000001 /* TelemetryPacket.swift */,
-				FF0001090000000000000001 /* SquadMember.swift */,
-				FF0001100000000000000001 /* SquadRoom.swift */,
-				FF0001110000000000000001 /* TacticalMapStyle.swift */,
-				FF0001120000000000000001 /* ContentView.swift */,
-				FF0001130000000000000001 /* SettingsView.swift */,
-				FF0001140000000000000001 /* RoomDiscoveryView.swift */,
-				FF0001150000000000000001 /* CreateRoomView.swift */,
-				FF0001160000000000000001 /* SquadLobbyView.swift */,
-				FF0001170000000000000001 /* MemberAnnotationView.swift */,
-				FF0001180000000000000001 /* TacticalRadarMapView.swift */,
-				FF0001190000000000000001 /* SquadTacticalIcons.swift */,
-				FF0001200000000000000001 /* SimpleRadarMapView.swift */,
-				FF0001210000000000000001 /* PaywallView.swift */,
-				FF0000010000000000000001 /* Info.plist */,
-				FF0000020000000000000001 /* GoogleService-Info.plist */,
+				FF0001010000000000000001 /* AppConstants.swift */,
+				FF0001020000000000000001 /* Managers/SubscriptionManager.swift */,
+				FF0001030000000000000001 /* Managers/FirebaseSyncManager.swift */,
+				FF0001040000000000000001 /* Managers/DeadReckoningEngine.swift */,
+				FF0001050000000000000001 /* Managers/LocationHeadingManager.swift */,
+				FF0001060000000000000001 /* Managers/GameStateManager.swift */,
+				FF0001070000000000000001 /* Managers/BluetoothDiscoveryManager.swift */,
+				FF0001080000000000000001 /* Managers/HealthKitManager.swift */,
+				FF0001090000000000000001 /* Managers/NetworkQualityMonitor.swift */,
+				FF0001100000000000000001 /* Models/RadarColorTheme.swift */,
+				FF0001110000000000000001 /* Models/TelemetryPacket.swift */,
+				FF0001120000000000000001 /* Models/SquadMember.swift */,
+				FF0001130000000000000001 /* Models/TacticalIndicator.swift */,
+				FF0001140000000000000001 /* Models/SquadRoom.swift */,
+				FF0001150000000000000001 /* Models/TacticalMapStyle.swift */,
+				FF0001160000000000000001 /* Views/ModelPresentationExtensions.swift */,
+				FF0001170000000000000001 /* Views/ContentView.swift */,
+				FF0001180000000000000001 /* Views/Settings/SettingsView.swift */,
+				FF0001190000000000000001 /* Views/Settings/PolicyView.swift */,
+				FF0001200000000000000001 /* Views/Room/RoomDiscoveryView.swift */,
+				FF0001210000000000000001 /* Views/Room/CreateRoomView.swift */,
+				FF0001220000000000000001 /* Views/Room/SquadLobbyView.swift */,
+				FF0001230000000000000001 /* Views/Map/MemberAnnotationView.swift */,
+				FF0001240000000000000001 /* Views/Map/TacticalIndicatorOverlayView.swift */,
+				FF0001250000000000000001 /* Views/Map/TacticalRadarMapView.swift */,
+				FF0001260000000000000001 /* Views/Map/TacticalIndicatorMenuView.swift */,
+				FF0001270000000000000001 /* Views/Map/SquadTacticalIcons.swift */,
+				FF0001280000000000000001 /* Views/Map/SimpleRadarMapView.swift */,
+				FF0001290000000000000001 /* Views/Paywall/PaywallView.swift */,
+				FF0000010000000000000001 /* Resources/Info.plist */,
+				FF0000020000000000000001 /* Resources/GoogleService-Info.plist */,
+				FF0000030000000000000001 /* Resources/Assets.xcassets */,
+				FF0000040000000000000001 /* Resources/RadarMapWatch.entitlements */,
 			);
 			path = RadarMap;
 			sourceTree = "<group>";
@@ -112,28 +180,59 @@
 		1A0000050000000000000001 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				1A0000010000000000000001 /* RadarMap.app */,
+				2A0000010000000000000001 /* RadarMap.app */,
+				1A0000010000000000000001 /* RadarMap Watch App.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		2A0000060000000000000001 /* RadarMapCompanion */ = {
+			isa = PBXGroup;
+			children = (
+				2F0001000000000000000001 /* RadarMapCompanionApp.swift */,
+				2F0000010000000000000001 /* Resources/Info.plist */,
+				2F0000040000000000000001 /* Resources/RadarMapCompanion.entitlements */,
+			);
+			path = RadarMapCompanion;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		1A0000060000000000000001 /* RadarMap */ = {
+		1A0000060000000000000001 /* RadarMap Watch App */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 1A0000070000000000000001 /* Build configuration list for PBXNativeTarget "RadarMap" */;
+			buildConfigurationList = 1A0000070000000000000001 /* Build configuration list for PBXNativeTarget "RadarMap Watch App" */;
 			buildPhases = (
 				1A0000080000000000000001 /* Sources */,
 				1A0000020000000000000001 /* Frameworks */,
+				1A0000100000000000000001 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			name = "RadarMap";
-			productName = "RadarMap";
-			productReference = 1A0000010000000000000001 /* RadarMap.app */;
+			name = "RadarMap Watch App";
+			productName = "RadarMap Watch App";
+			productReference = 1A0000010000000000000001 /* RadarMap Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		2A0000070000000000000001 /* RadarMap */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2A0000080000000000000001 /* Build configuration list for PBXNativeTarget "RadarMap" */;
+			buildPhases = (
+				2A0000090000000000000001 /* Sources */,
+				2A0000050000000000000001 /* Frameworks */,
+				2A0000100000000000000001 /* Resources */,
+				2A0000040000000000000001 /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2A00000A0000000000000001 /* PBXTargetDependency */,
+			);
+			name = RadarMap;
+			productName = RadarMap;
+			productReference = 2A0000010000000000000001 /* RadarMap.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -148,6 +247,13 @@
 				TargetAttributes = {
 					1A0000060000000000000001 = {
 						CreatedOnToolsVersion = 15.0;
+						DevelopmentTeam = 2VUBR7QPFD;
+						ProvisioningStyle = Automatic;
+					};
+					2A0000070000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+						DevelopmentTeam = 2VUBR7QPFD;
+						ProvisioningStyle = Automatic;
 					};
 				};
 			};
@@ -164,10 +270,30 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				1A0000060000000000000001 /* RadarMap */,
+				2A0000070000000000000001 /* RadarMap */,
+				1A0000060000000000000001 /* RadarMap Watch App */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1A0000100000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FF0000030000000000000002 /* Resources/Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A0000100000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2F0000030000000000000002 /* Resources/Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		1A0000080000000000000001 /* Sources */ = {
@@ -175,31 +301,55 @@
 			buildActionMask = 2147483647;
 			files = (
 				FF0001000000000000000002 /* RadarMapApp.swift in Sources */,
-				FF0001010000000000000002 /* SubscriptionManager.swift in Sources */,
-				FF0001020000000000000002 /* FirebaseSyncManager.swift in Sources */,
-				FF0001030000000000000002 /* LocationHeadingManager.swift in Sources */,
-				FF0001040000000000000002 /* GameStateManager.swift in Sources */,
-				FF0001050000000000000002 /* BluetoothDiscoveryManager.swift in Sources */,
-				FF0001060000000000000002 /* HealthKitManager.swift in Sources */,
-				FF0001070000000000000002 /* RadarColorTheme.swift in Sources */,
-				FF0001080000000000000002 /* TelemetryPacket.swift in Sources */,
-				FF0001090000000000000002 /* SquadMember.swift in Sources */,
-				FF0001100000000000000002 /* SquadRoom.swift in Sources */,
-				FF0001110000000000000002 /* TacticalMapStyle.swift in Sources */,
-				FF0001120000000000000002 /* ContentView.swift in Sources */,
-				FF0001130000000000000002 /* SettingsView.swift in Sources */,
-				FF0001140000000000000002 /* RoomDiscoveryView.swift in Sources */,
-				FF0001150000000000000002 /* CreateRoomView.swift in Sources */,
-				FF0001160000000000000002 /* SquadLobbyView.swift in Sources */,
-				FF0001170000000000000002 /* MemberAnnotationView.swift in Sources */,
-				FF0001180000000000000002 /* TacticalRadarMapView.swift in Sources */,
-				FF0001190000000000000002 /* SquadTacticalIcons.swift in Sources */,
-				FF0001200000000000000002 /* SimpleRadarMapView.swift in Sources */,
-				FF0001210000000000000002 /* PaywallView.swift in Sources */,
+				FF0001010000000000000002 /* AppConstants.swift in Sources */,
+				FF0001020000000000000002 /* Managers/SubscriptionManager.swift in Sources */,
+				FF0001030000000000000002 /* Managers/FirebaseSyncManager.swift in Sources */,
+				FF0001040000000000000002 /* Managers/DeadReckoningEngine.swift in Sources */,
+				FF0001050000000000000002 /* Managers/LocationHeadingManager.swift in Sources */,
+				FF0001060000000000000002 /* Managers/GameStateManager.swift in Sources */,
+				FF0001070000000000000002 /* Managers/BluetoothDiscoveryManager.swift in Sources */,
+				FF0001080000000000000002 /* Managers/HealthKitManager.swift in Sources */,
+				FF0001090000000000000002 /* Managers/NetworkQualityMonitor.swift in Sources */,
+				FF0001100000000000000002 /* Models/RadarColorTheme.swift in Sources */,
+				FF0001110000000000000002 /* Models/TelemetryPacket.swift in Sources */,
+				FF0001120000000000000002 /* Models/SquadMember.swift in Sources */,
+				FF0001130000000000000002 /* Models/TacticalIndicator.swift in Sources */,
+				FF0001140000000000000002 /* Models/SquadRoom.swift in Sources */,
+				FF0001150000000000000002 /* Models/TacticalMapStyle.swift in Sources */,
+				FF0001160000000000000002 /* Views/ModelPresentationExtensions.swift in Sources */,
+				FF0001170000000000000002 /* Views/ContentView.swift in Sources */,
+				FF0001180000000000000002 /* Views/Settings/SettingsView.swift in Sources */,
+				FF0001190000000000000002 /* Views/Settings/PolicyView.swift in Sources */,
+				FF0001200000000000000002 /* Views/Room/RoomDiscoveryView.swift in Sources */,
+				FF0001210000000000000002 /* Views/Room/CreateRoomView.swift in Sources */,
+				FF0001220000000000000002 /* Views/Room/SquadLobbyView.swift in Sources */,
+				FF0001230000000000000002 /* Views/Map/MemberAnnotationView.swift in Sources */,
+				FF0001240000000000000002 /* Views/Map/TacticalIndicatorOverlayView.swift in Sources */,
+				FF0001250000000000000002 /* Views/Map/TacticalRadarMapView.swift in Sources */,
+				FF0001260000000000000002 /* Views/Map/TacticalIndicatorMenuView.swift in Sources */,
+				FF0001270000000000000002 /* Views/Map/SquadTacticalIcons.swift in Sources */,
+				FF0001280000000000000002 /* Views/Map/SimpleRadarMapView.swift in Sources */,
+				FF0001290000000000000002 /* Views/Paywall/PaywallView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A0000090000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2F0001000000000000000002 /* RadarMapCompanionApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		2A00000A0000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1A0000060000000000000001 /* RadarMap Watch App */;
+			targetProxy = 2A0000030000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		1A00000B0000000000000001 /* Debug */ = {
@@ -210,10 +360,9 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 2VUBR7QPFD;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_DYNAMIC_NO_PIC = NO;
@@ -232,13 +381,10 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				SDKROOT = watchsimulator;
-				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "4";
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Debug;
 		};
@@ -250,10 +396,9 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 2VUBR7QPFD;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -265,13 +410,10 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				SDKROOT = watchsimulator;
-				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "4";
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Release;
 		};
@@ -280,10 +422,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Manual;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_ENTITLEMENTS = RadarMap/Resources/RadarMapWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2VUBR7QPFD;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = RadarMap/Resources/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Radar Map";
@@ -292,12 +434,13 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.radarmap.watch;
-				PRODUCT_NAME = "RadarMap";
-				SDKROOT = watchsimulator;
+				PRODUCT_BUNDLE_IDENTIFIER = com.radarmap.watch.watchkitapp;
+				PRODUCT_NAME = "RadarMap Watch App";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "watchsimulator watchos";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				TARGETED_DEVICE_FAMILY = "4";
+				TARGETED_DEVICE_FAMILY = 4;
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Debug;
@@ -307,10 +450,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Manual;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_ENTITLEMENTS = RadarMap/Resources/RadarMapWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2VUBR7QPFD;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = RadarMap/Resources/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Radar Map";
@@ -319,19 +462,81 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.radarmap.watch;
-				PRODUCT_NAME = "RadarMap";
-				SDKROOT = watchsimulator;
+				PRODUCT_BUNDLE_IDENTIFIER = com.radarmap.watch.watchkitapp;
+				PRODUCT_NAME = "RadarMap Watch App";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "watchsimulator watchos";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				TARGETED_DEVICE_FAMILY = "4";
+				TARGETED_DEVICE_FAMILY = 4;
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		2A00000B0000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = RadarMapCompanion/Resources/RadarMapCompanion.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2VUBR7QPFD;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RadarMapCompanion/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Radar Map";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.radarmap.watch;
+				PRODUCT_NAME = RadarMap;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		2A00000C0000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = RadarMapCompanion/Resources/RadarMapCompanion.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2VUBR7QPFD;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RadarMapCompanion/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Radar Map";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.radarmap.watch;
+				PRODUCT_NAME = RadarMap;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		1A0000070000000000000001 /* Build configuration list for PBXNativeTarget "RadarMap Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A00000D0000000000000001 /* Debug */,
+				1A00000E0000000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		1A00000A0000000000000001 /* Build configuration list for PBXProject "RadarMap" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -341,17 +546,16 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		1A0000070000000000000001 /* Build configuration list for PBXNativeTarget "RadarMap" */ = {
+		2A0000080000000000000001 /* Build configuration list for PBXNativeTarget "RadarMap" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				1A00000D0000000000000001 /* Debug */,
-				1A00000E0000000000000001 /* Release */,
+				2A00000B0000000000000001 /* Debug */,
+				2A00000C0000000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
 	};
 	rootObject = 1A0000090000000000000001 /* Project object */;
 }

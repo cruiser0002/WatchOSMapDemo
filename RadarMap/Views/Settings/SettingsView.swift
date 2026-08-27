@@ -58,6 +58,8 @@ public struct SettingsView: View {
                 
                 paywallSection
                 
+                policySection
+                
                 if let room = gameState.firebaseManager.activeRoom {
                     rosterSection(room: room)
                 }
@@ -77,7 +79,11 @@ public struct SettingsView: View {
                 callsignInput = gameState.myCallsign
                 if let room = gameState.firebaseManager.activeRoom {
                     squadName = room.name
-                    squadPin = ""
+                } else if squadName.isEmpty {
+                    squadName = gameState.savedRoomName
+                }
+                if squadPin.isEmpty {
+                    squadPin = gameState.savedPin
                 }
             }
             .sheet(isPresented: $showPaywall) {
@@ -93,7 +99,7 @@ public struct SettingsView: View {
                 set: { if !$0 { gameState.errorMessage = nil } }
             )) {
                 Alert(
-                    title: Text("Squad Error"),
+                    title: Text("Error"),
                     message: Text(gameState.errorMessage ?? "An error occurred."),
                     dismissButton: .default(Text("OK"))
                 )
@@ -105,6 +111,11 @@ public struct SettingsView: View {
                     }
                 }
             }
+            .onChange(of: isBusy) { _, busy in
+                if busy {
+                    focusedField = nil
+                }
+            }
         }
     }
     
@@ -112,101 +123,74 @@ public struct SettingsView: View {
     
     @ViewBuilder
     private var callsignField: some View {
-        #if os(iOS) || os(watchOS)
         TextField("Callsign", text: $callsignInput)
             .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .foregroundColor(gameState.callsignError ? .red : (isBusy ? .gray : .primary))
+            .opacity(isBusy ? 0.6 : 1.0)
             .lineLimit(1)
             .submitLabel(.done)
+            #if os(iOS) || os(watchOS)
             .textInputAutocapitalization(.characters)
+            #endif
             .autocorrectionDisabled()
             .focused($focusedField, equals: .callsign)
             .id(FocusField.callsign)
             .disabled(isBusy)
+            .listRowBackground(gameState.callsignError ? Color.red.opacity(0.18) : nil)
             .onChange(of: callsignInput) { _, newValue in
+                gameState.callsignError = false
                 let filtered = newValue.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-                if !filtered.isEmpty {
-                    gameState.myCallsign = filtered
-                }
+                gameState.myCallsign = filtered
             }
-        #else
-        TextField("Callsign", text: $callsignInput)
-            .font(.system(size: 11, weight: .bold, design: .monospaced))
-            .lineLimit(1)
-            .submitLabel(.done)
-            .autocorrectionDisabled()
-            .focused($focusedField, equals: .callsign)
-            .id(FocusField.callsign)
-            .disabled(isBusy)
-            .onChange(of: callsignInput) { _, newValue in
-                let filtered = newValue.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-                if !filtered.isEmpty {
-                    gameState.myCallsign = filtered
-                }
-            }
-        #endif
     }
     
     @ViewBuilder
     private var squadNameField: some View {
-        #if os(iOS) || os(watchOS)
-        TextField("Squad Name", text: $squadName)
+        TextField("Room Name", text: $squadName)
             .font(.system(size: 11))
+            .foregroundColor(gameState.squadNameError ? .red : (isBusy ? .gray : .primary))
+            .opacity(isBusy ? 0.6 : 1.0)
             .lineLimit(1)
             .submitLabel(.done)
+            #if os(iOS) || os(watchOS)
             .textInputAutocapitalization(.characters)
+            #endif
             .autocorrectionDisabled()
             .focused($focusedField, equals: .squadName)
             .id(FocusField.squadName)
             .disabled(isBusy)
-        #else
-        TextField("Squad Name", text: $squadName)
-            .font(.system(size: 11))
-            .lineLimit(1)
-            .submitLabel(.done)
-            .autocorrectionDisabled()
-            .focused($focusedField, equals: .squadName)
-            .id(FocusField.squadName)
-            .disabled(isBusy)
-        #endif
+            .listRowBackground(gameState.squadNameError ? Color.red.opacity(0.18) : nil)
+            .onChange(of: squadName) { _, newValue in
+                gameState.squadNameError = false
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                gameState.savedRoomName = trimmed
+            }
     }
     
     @ViewBuilder
     private var pinField: some View {
-        #if os(iOS)
-        TextField("Squad PIN (4 digits, optional)", text: $squadPin)
+        TextField("PIN (4 digits, optional)", text: $squadPin)
             .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .foregroundColor(gameState.pinError ? .red : (isBusy ? .gray : .primary))
+            .opacity(isBusy ? 0.6 : 1.0)
             .lineLimit(1)
             .submitLabel(.done)
-            .keyboardType(.numberPad)
             .textContentType(.oneTimeCode)
+            #if os(iOS)
+            .keyboardType(.numberPad)
+            #endif
             .focused($focusedField, equals: .pin)
             .id(FocusField.pin)
             .disabled(isBusy)
+            .listRowBackground(gameState.pinError ? Color.red.opacity(0.18) : nil)
             .onChange(of: squadPin) { _, newValue in
-                let filtered = newValue.filter { $0.isNumber }
-                if filtered.count > 4 {
-                    squadPin = String(filtered.prefix(4))
-                } else if filtered != newValue {
-                    squadPin = filtered
+                gameState.pinError = false
+                let sanitized = GameStateManager.sanitizePinInput(newValue)
+                if squadPin != sanitized {
+                    squadPin = sanitized
                 }
+                gameState.savedPin = squadPin
             }
-        #else
-        TextField("Squad PIN (4 digits, optional)", text: $squadPin)
-            .font(.system(size: 11, weight: .bold, design: .monospaced))
-            .lineLimit(1)
-            .submitLabel(.done)
-            .focused($focusedField, equals: .pin)
-            .id(FocusField.pin)
-            .disabled(isBusy)
-            .onChange(of: squadPin) { _, newValue in
-                let filtered = newValue.filter { $0.isNumber }
-                if filtered.count > 4 {
-                    squadPin = String(filtered.prefix(4))
-                } else if filtered != newValue {
-                    squadPin = filtered
-                }
-            }
-        #endif
     }
     
     @ViewBuilder
@@ -232,7 +216,7 @@ public struct SettingsView: View {
             Button(action: {
                 let name = squadName.trimmingCharacters(in: .whitespacesAndNewlines)
                 let pin = squadPin.trimmingCharacters(in: .whitespacesAndNewlines)
-                _ = gameState.hostRoom(name: name.isEmpty ? "Alpha Squad" : name, pin: pin.isEmpty ? nil : pin)
+                _ = gameState.hostRoom(name: name, pin: pin.isEmpty ? nil : pin)
             }) {
                 HStack(spacing: 6) {
                     Spacer()
@@ -269,7 +253,7 @@ public struct SettingsView: View {
                 HStack {
                     Spacer()
                     Image(systemName: "rectangle.portrait.and.arrow.right")
-                    Text("Leave")
+                    Text("Logout")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.white)
                     Spacer()
@@ -283,9 +267,7 @@ public struct SettingsView: View {
             Button(action: {
                 let name = squadName.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
                 let pin = squadPin.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !name.isEmpty {
-                    gameState.joinRoom(id: name, name: name, pin: pin.isEmpty ? nil : pin)
-                }
+                gameState.joinRoom(id: name, name: name, pin: pin.isEmpty ? nil : pin)
             }) {
                 HStack(spacing: 6) {
                     Spacer()
@@ -300,16 +282,16 @@ public struct SettingsView: View {
                         Image(systemName: "person.badge.plus")
                         Text("Join")
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundColor((gameState.isInitiatingHost || isHost || squadName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? .gray : .black)
+                            .foregroundColor((gameState.isInitiatingHost || isHost) ? .gray : .black)
                     }
                     Spacer()
                 }
                 .padding(.vertical, 6)
-                .background((gameState.isInitiatingHost || isHost || squadName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? Color.gray.opacity(0.3) : Color.cyan)
+                .background((gameState.isInitiatingHost || isHost) ? Color.gray.opacity(0.3) : Color.cyan)
                 .cornerRadius(6)
             }
             .buttonStyle(.plain)
-            .disabled(gameState.isInitiatingHost || gameState.isJoining || isHost || squadName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(gameState.isInitiatingHost || gameState.isJoining || isHost)
         }
     }
     
@@ -317,8 +299,8 @@ public struct SettingsView: View {
     private var radarColorSection: some View {
         Section {
             Toggle(isOn: Binding(
-                get: { gameState.radarColorTheme == .red },
-                set: { gameState.radarColorTheme = $0 ? .red : .green }
+                get: { gameState.radarColorTheme == .green },
+                set: { gameState.radarColorTheme = $0 ? .green : .red }
             )) {
                 HStack {
                     Text("Radar color")
@@ -339,7 +321,7 @@ public struct SettingsView: View {
                 HStack {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundColor(.yellow)
-                    Text("Squad Leader Unlocked")
+                    Text("Pro Unlocked")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.yellow)
                 }
@@ -350,13 +332,9 @@ public struct SettingsView: View {
                     HStack {
                         Image(systemName: "lock.shield.fill")
                             .foregroundColor(.yellow)
-                        Text("Unlock squad leader")
+                        Text("Unlock Pro")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.yellow)
-                        Spacer()
-                        Text(SubscriptionManager.lifetimePriceString)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(.gray)
                     }
                 }
             }
@@ -364,9 +342,23 @@ public struct SettingsView: View {
     }
     
     @ViewBuilder
+    private var policySection: some View {
+        Section {
+            NavigationLink(destination: PolicyView()) {
+                HStack(spacing: 8) {
+                    Image(systemName: "hand.raised.shield.fill")
+                        .foregroundColor(.cyan)
+                    Text("Policy")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
     private func rosterSection(room: SquadRoom) -> some View {
-        Section(header: Text("Squad Roster (\(room.memberCount))").font(.system(size: 9))) {
-            ForEach(squadMembers) { member in
+        Section(header: Text("Roster (\(room.memberCount))").font(.system(size: 9))) {
+            ForEach(squadMembers, id: \.id) { member in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {

@@ -21,7 +21,8 @@ let package = Package(
             path: "RadarMap",
             exclude: [
                 "Resources/Info.plist",
-                "Resources/GoogleService-Info.plist"
+                "Resources/GoogleService-Info.plist",
+                "Resources/RadarMap.storekit"
             ]
         ),
         .testTarget(

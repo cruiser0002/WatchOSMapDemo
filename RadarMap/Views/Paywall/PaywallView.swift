@@ -6,23 +6,32 @@ public struct PaywallView: View {
     
     public init() {}
     
+    @State private var showErrorAlert: Bool = false
+    
     public var body: some View {
         ScrollView {
             VStack(spacing: 8) {
                 // Header Icon & Title
-                VStack(spacing: 4) {
+                VStack(spacing: 3) {
                     Image(systemName: "person.3.sequence.fill")
                         .font(.system(size: 28))
                         .foregroundColor(.yellow)
                     
-                    Text("Squad Leader")
+                    Text("Pro Upgrade")
                         .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                     
-                    Text("Create rooms with >4 operators")
-                        .font(.system(size: 10))
-                        .foregroundColor(.gray)
-                        .multilineTextAlignment(.center)
+                    Text(gameState.subscriptionManager.localizedPrice)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundColor(.yellow)
+                    
+                    if let promoMessage = gameState.subscriptionManager.promotionalPriceMessage, !promoMessage.isEmpty {
+                        Text(promoMessage)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.green)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 4)
+                    }
                 }
                 .padding(.top, 4)
                 
@@ -30,8 +39,9 @@ public struct PaywallView: View {
                 
                 // Features
                 VStack(alignment: .leading, spacing: 6) {
-                    FeatureRow(icon: "infinity", text: "Host unlimited players")
-                    FeatureRow(icon: "antenna.radiowaves.left.and.right", text: "Broadcast BLE Radar")
+                    FeatureRow(icon: "person.3.fill", text: ">4 players")
+                    FeatureRow(icon: "star.fill", text: "Orders")
+                    FeatureRow(icon: "exclamationmark.triangle.fill", text: "Enemy indicators")
                     FeatureRow(icon: "person.badge.shield.checkmark.fill", text: "Others join 100% free")
                 }
                 .padding(.horizontal, 4)
@@ -43,15 +53,17 @@ public struct PaywallView: View {
                             let success = await gameState.subscriptionManager.purchaseLifetimeUnlock()
                             if success {
                                 dismiss()
+                            } else if gameState.subscriptionManager.errorMessage != nil {
+                                showErrorAlert = true
                             }
                         }
                     }) {
                         HStack {
-                            if gameState.subscriptionManager.isPurchasing {
+                            if gameState.subscriptionManager.isPurchasing && !gameState.subscriptionManager.isRestoring {
                                 ProgressView()
                                     .scaleEffect(0.7)
                             } else {
-                                Text("Unlock for \(SubscriptionManager.lifetimePriceString)")
+                                Text("Unlock Pro")
                                     .font(.system(size: 12, weight: .bold))
                             }
                         }
@@ -70,14 +82,29 @@ public struct PaywallView: View {
                             let restored = await gameState.subscriptionManager.restorePurchases()
                             if restored {
                                 dismiss()
+                            } else if gameState.subscriptionManager.errorMessage != nil {
+                                showErrorAlert = true
                             }
                         }
                     }) {
-                        Text("Restore Purchase")
-                            .font(.system(size: 9))
-                            .foregroundColor(.gray)
+                        HStack(spacing: 4) {
+                            if gameState.subscriptionManager.isRestoring {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                            }
+                            Text("Restore Purchases")
+                                .font(.system(size: 9))
+                                .foregroundColor(.gray)
+                        }
                     }
                     .buttonStyle(.plain)
+                    .disabled(gameState.subscriptionManager.isPurchasing)
+                    
+                    Text("One-time lifetime purchase. No subscriptions.")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 2)
                 }
                 .padding(.top, 4)
             }
@@ -87,6 +114,11 @@ public struct PaywallView: View {
         #if os(watchOS) || os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .alert("Purchase Issue", isPresented: $showErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(gameState.subscriptionManager.errorMessage ?? "An unexpected error occurred. Please try again.")
+        }
     }
 }
 

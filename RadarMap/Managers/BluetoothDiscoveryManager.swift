@@ -8,6 +8,23 @@ public struct DiscoveredRoom: Identifiable, Equatable {
     public let rssi: Int           // Signal strength
     public let discoveredAt: Date
     public let peripheral: CBPeripheral?
+    public var hasPin: Bool
+    
+    public init(
+        id: String,
+        name: String,
+        rssi: Int,
+        discoveredAt: Date,
+        peripheral: CBPeripheral?,
+        hasPin: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.rssi = rssi
+        self.discoveredAt = discoveredAt
+        self.peripheral = peripheral
+        self.hasPin = hasPin
+    }
     
     public static func == (lhs: DiscoveredRoom, rhs: DiscoveredRoom) -> Bool {
         lhs.id == rhs.id
@@ -15,8 +32,8 @@ public struct DiscoveredRoom: Identifiable, Equatable {
 }
 
 public final class BluetoothDiscoveryManager: NSObject, ObservableObject, CBCentralManagerDelegate {
-    public static let radarServiceUUID = CBUUID(string: "A495FA01-C5B1-4B44-B512-1370F02D74DE")
-    public static let roomDataCharacteristicUUID = CBUUID(string: "A495FA02-C5B1-4B44-B512-1370F02D74DE")
+    public static let radarServiceUUID = AppConstants.Network.Bluetooth.radarServiceUUID
+    public static let roomDataCharacteristicUUID = AppConstants.Network.Bluetooth.roomDataCharacteristicUUID
     
     @Published public var discoveredRooms: [DiscoveredRoom] = []
     @Published public var isScanning: Bool = false
@@ -61,9 +78,10 @@ public final class BluetoothDiscoveryManager: NSObject, ObservableObject, CBCent
         #if !os(watchOS)
         guard let peripheralManager = peripheralManager, peripheralManager.state == .poweredOn else { return }
         
+        let pinFlag = room.hasPin ? "1" : "0"
         let advertisementData: [String: Any] = [
             CBAdvertisementDataServiceUUIDsKey: [BluetoothDiscoveryManager.radarServiceUUID],
-            CBAdvertisementDataLocalNameKey: "RM:\(room.id):\(room.name)"
+            CBAdvertisementDataLocalNameKey: "\(AppConstants.Network.Bluetooth.advertisementPrefix)\(room.id):\(room.name):\(pinFlag)"
         ]
         
         peripheralManager.stopAdvertising()
@@ -90,19 +108,24 @@ public final class BluetoothDiscoveryManager: NSObject, ObservableObject, CBCent
     }
     
     public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
-        let localName = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name ?? "Radar-Room"
+        let localName = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name ?? AppConstants.Network.Bluetooth.defaultLocalName
         
-        // Parse payload e.g. "RM:ROOM_ID:ROOM_NAME"
+        // Parse payload e.g. "RM:ROOM_ID:ROOM_NAME" or "RM:ROOM_ID:ROOM_NAME:PIN_FLAG"
         var roomId = peripheral.identifier.uuidString.prefix(6).uppercased()
         var roomName = localName
+        var hasPin = false
         
-        if localName.hasPrefix("RM:") {
+        let prefix = AppConstants.Network.Bluetooth.advertisementPrefix
+        if localName.hasPrefix(prefix) {
             let parts = localName.split(separator: ":")
             if parts.count >= 2 {
                 roomId = String(parts[1])
             }
             if parts.count >= 3 {
                 roomName = String(parts[2])
+            }
+            if parts.count >= 4 {
+                hasPin = (parts[3] == "1" || parts[3] == "true")
             }
         }
         
@@ -111,7 +134,8 @@ public final class BluetoothDiscoveryManager: NSObject, ObservableObject, CBCent
             name: roomName,
             rssi: RSSI.intValue,
             discoveredAt: Date(),
-            peripheral: peripheral
+            peripheral: peripheral,
+            hasPin: hasPin
         )
         
         DispatchQueue.main.async {

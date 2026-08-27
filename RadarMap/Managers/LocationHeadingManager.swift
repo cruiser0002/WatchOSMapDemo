@@ -3,10 +3,96 @@ import CoreLocation
 import Combine
 
 public final class LocationHeadingManager: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published public var userLocation: CLLocation?
-    @Published public var userHeading: CLHeading?
+    @Published public var userLocation: CLLocation? {
+        didSet {
+            recalculateBlendedHeading()
+        }
+    }
+    @Published public var userHeading: CLHeading? {
+        didSet {
+            recalculateBlendedHeading()
+        }
+    }
+    @Published public var blendedHeading: Double = 0.0
     @Published public var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published public var isUpdating: Bool = false
+    
+    // MARK: - Speed-Weighted Heading Blending (COG + Compass)
+    
+    /// Speed threshold below which heading is 100% compass (stationary / looking around).
+    public static let stationarySpeedThresholdMps: Double = AppConstants.Location.stationarySpeedThresholdMps
+    
+    /// Speed threshold above which heading is 100% GPS Course Over Ground (running / sprinting).
+    public static let runningSpeedThresholdMps: Double = AppConstants.Location.runningSpeedThresholdMps
+    
+    /// Smooth circular interpolation between two angles (in degrees) using 2D unit vector decomposition.
+    /// Prevents discontinuities when crossing the 0° / 360° north boundary.
+    public static func circularInterpolate(from angle1: Double, to angle2: Double, weight: Double) -> Double {
+        let clampedWeight = min(max(weight, 0.0), 1.0)
+        let rad1 = angle1 * AppConstants.Location.degreesToRadiansFactor
+        let rad2 = angle2 * AppConstants.Location.degreesToRadiansFactor
+        
+        let x = (1.0 - clampedWeight) * cos(rad1) + clampedWeight * cos(rad2)
+        let y = (1.0 - clampedWeight) * sin(rad1) + clampedWeight * sin(rad2)
+        
+        guard abs(x) > AppConstants.Location.vectorEpsilon || abs(y) > AppConstants.Location.vectorEpsilon else { return angle1 }
+        let blendedRad = atan2(y, x)
+        let degrees = blendedRad * AppConstants.Location.radiansToDegreesFactor
+        return (degrees + AppConstants.Location.fullCircleDegrees).truncatingRemainder(dividingBy: AppConstants.Location.fullCircleDegrees)
+    }
+    
+    /// Computes the blended heading by dynamically weighting compass heading and GPS course over ground.
+    public static func computeBlendedHeading(
+        compassHeading: Double,
+        gpsCourse: Double,
+        speedMps: Double,
+        hasValidCompass: Bool = true,
+        hasValidCourse: Bool = true
+    ) -> Double {
+        if !hasValidCourse && hasValidCompass {
+            return compassHeading
+        }
+        if !hasValidCompass && hasValidCourse {
+            return gpsCourse
+        }
+        if !hasValidCompass && !hasValidCourse {
+            return compassHeading
+        }
+        
+        if speedMps <= stationarySpeedThresholdMps {
+            return compassHeading
+        }
+        if speedMps >= runningSpeedThresholdMps {
+            return gpsCourse
+        }
+        
+        // Speed is between 0.5 m/s and 2.5 m/s: smoothly ramp weight
+        let weight = (speedMps - stationarySpeedThresholdMps) / (runningSpeedThresholdMps - stationarySpeedThresholdMps)
+        return circularInterpolate(from: compassHeading, to: gpsCourse, weight: weight)
+    }
+    
+    private func recalculateBlendedHeading() {
+        let compass = userHeading != nil && userHeading!.headingAccuracy >= 0 ? (userHeading!.trueHeading >= 0 ? userHeading!.trueHeading : userHeading!.magneticHeading) : nil
+        let loc = userLocation
+        let course = loc != nil && loc!.course >= 0 ? loc!.course : nil
+        let speed = max(0.0, loc?.speed ?? 0.0)
+        
+        let hasValidCompass = compass != nil
+        let hasValidCourse = course != nil
+        
+        let rawCompass = compass ?? blendedHeading
+        let rawCourse = course ?? blendedHeading
+        
+        let newHeading = LocationHeadingManager.computeBlendedHeading(
+            compassHeading: rawCompass,
+            gpsCourse: rawCourse,
+            speedMps: speed,
+            hasValidCompass: hasValidCompass,
+            hasValidCourse: hasValidCourse
+        )
+        
+        self.blendedHeading = newHeading
+    }
     
     private let locationManager = CLLocationManager()
     
@@ -14,9 +100,11 @@ public final class LocationHeadingManager: NSObject, ObservableObject, CLLocatio
         super.init()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        locationManager.distanceFilter = 1.0 // 1 meter update sensitivity
+        locationManager.distanceFilter = kCLDistanceFilterNone
+        locationManager.activityType = .fitness
         #if os(watchOS) || os(iOS)
-        locationManager.headingFilter = 2.0  // 2 degree heading sensitivity
+        locationManager.headingFilter = kCLHeadingFilterNone
+        locationManager.headingOrientation = .portrait
         #endif
     }
     
