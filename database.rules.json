@@ -3,39 +3,23 @@
     ".read": false,
     ".write": false,
     "rooms": {
-      ".indexOn": ["createdAt", "lastActivityTimestamp"],
+      ".indexOn": ["expireAt", "createdAt", "lastActivityTimestamp"],
       "$roomId": {
-        ".read": "auth != null",
-        ".write": "auth != null",
-        ".validate": "$roomId.length > 0",
-        "members": {
-          ".read": "auth != null",
-          "$memberId": {
-            ".read": "auth != null",
-            ".write": "auth != null",
-            ".validate": "newData.hasChild('callsign') && newData.child('callsign').val().length > 0"
-          }
-        }
+        ".read": true,
+        ".write": true,
+        ".validate": "$roomId.length > 0 && $roomId.length <= 64"
       }
     },
     "telemetry": {
       "$roomId": {
-        ".read": "auth != null",
-        ".write": "auth != null",
-        "$memberId": {
-          ".read": "auth != null",
-          ".write": "auth != null"
-        }
+        ".read": true,
+        ".write": "root.child('rooms').child($roomId).exists()"
       }
     },
     "tactical": {
       "$roomId": {
-        ".read": "auth != null",
-        ".write": "auth != null",
-        "$memberId": {
-          ".read": "auth != null",
-          ".write": "auth != null"
-        }
+        ".read": true,
+        ".write": "root.child('rooms').child($roomId).exists()"
       }
     }
   }

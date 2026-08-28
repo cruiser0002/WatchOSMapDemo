@@ -115,7 +115,9 @@ public struct PaywallView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .alert("Purchase Issue", isPresented: $showErrorAlert) {
-            Button("OK", role: .cancel) { }
+            Button("OK", role: .cancel) {
+                gameState.subscriptionManager.errorMessage = nil
+            }
         } message: {
             Text(gameState.subscriptionManager.errorMessage ?? "An unexpected error occurred. Please try again.")
         }

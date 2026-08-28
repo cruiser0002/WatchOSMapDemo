@@ -162,12 +162,12 @@ public struct SquadDeadXShape: Shape {
     }
 }
 
-/// Heart rate core pulsator that scales and pulses at a frequency proportional to (BPM / 100)
+/// Heart rate core pulsator that scales and pulses at a frequency proportional to (BPM / 100).
+/// Uses a TimelineView to drive the pulse cycle so the animation period can update smoothly
+/// when BPM changes without causing a visible restart jump.
 public struct SquadPulseCore: View {
     public let heartRate: Double
     public let tintColor: Color
-    
-    @State private var isPulsing: Bool = false
     
     public init(heartRate: Double, tintColor: Color) {
         self.heartRate = heartRate
@@ -183,37 +183,29 @@ public struct SquadPulseCore: View {
     }
     
     public var body: some View {
-        ZStack {
-            if heartRate > 0 {
-                // Expanding pulse ring (breathing circle)
-                Circle()
-                    .stroke(tintColor.opacity(isPulsing ? 0.0 : 0.8), lineWidth: 1.2)
-                    .scaleEffect(isPulsing ? 1.9 : 0.8, anchor: .center)
+        if heartRate > 0 {
+            // Drive breathing pulse at display refresh interval (20Hz / 0.05s) for fluid continuous phase interpolation
+            TimelineView(.periodic(from: .now, by: AppConstants.Timing.DisplayRefresh.radarUIIntervalSeconds)) { timeline in
+                let elapsed = timeline.date.timeIntervalSinceReferenceDate
+                let phase = elapsed.truncatingRemainder(dividingBy: pulseDuration) / pulseDuration
+                // phase runs 0→1 once per heartbeat; map to a smooth 0→1→0 pulse
+                let beat = sin(phase * .pi)   // 0 at start, peaks at 0.5, back to 0
                 
-                // Solid center core dot (player dot)
-                Circle()
-                    .fill(tintColor)
-                    .scaleEffect(isPulsing ? 1.2 : 0.8, anchor: .center)
+                ZStack {
+                    // Expanding and shrinking white breathing pulse ring (thin line)
+                    Circle()
+                        .stroke(Color.white.opacity(0.4 + beat * 0.55), lineWidth: 0.55)
+                        .scaleEffect(0.9 + beat * 0.9, anchor: .center)
+                    
+                    // Central solid black dot
+                    Circle()
+                        .fill(Color.black)
+                        .scaleEffect(0.75 + beat * 0.25, anchor: .center)
+                }
             }
-        }
-        .onAppear {
-            startPulsing()
-        }
-        .onChange(of: heartRate) { _, _ in
-            startPulsing()
-        }
-    }
-    
-    private func startPulsing() {
-        guard heartRate > 0 else {
-            isPulsing = false
-            return
-        }
-        withAnimation(
-            Animation.easeInOut(duration: pulseDuration / 2)
-                .repeatForever(autoreverses: true)
-        ) {
-            isPulsing = true
+        } else {
+            // No heart rate — render nothing (KIA / flatline handled by parent)
+            EmptyView()
         }
     }
 }
@@ -258,7 +250,54 @@ public struct ECGWaveShape: Shape {
         return path
     }
     
-    /// Computes (x, y) point on the ECG curve for a normalized progress in [0, 1]
+    // Pre-calculated 101-element normalized LUT for ECG curve in [0, 1] range
+    private static let ecgNormalizedYLUT: [CGFloat] = {
+        var lut = [CGFloat](repeating: 0, count: 101)
+        let ecg = AppConstants.UI.TacticalShapes.ECG.self
+        for i in 0...100 {
+            let t = CGFloat(i) / 100.0
+            let yOffset: CGFloat
+            if t < ecg.pWaveStart {
+                yOffset = 0.0
+            } else if t < ecg.pWavePeak {
+                let frac = (t - ecg.pWaveStart) / (ecg.pWavePeak - ecg.pWaveStart)
+                yOffset = -ecg.pWaveHeightRatio * frac
+            } else if t < ecg.pWaveEnd {
+                let frac = (t - ecg.pWavePeak) / (ecg.pWaveEnd - ecg.pWavePeak)
+                yOffset = -ecg.pWaveHeightRatio * (1.0 - frac)
+            } else if t < ecg.qDip {
+                let frac = (t - ecg.pWaveEnd) / (ecg.qDip - ecg.pWaveEnd)
+                yOffset = ecg.qDipDepthRatio * frac
+            } else if t < ecg.rPeak {
+                let frac = (t - ecg.qDip) / (ecg.rPeak - ecg.qDip)
+                let startY = ecg.qDipDepthRatio
+                let endY = -ecg.rPeakHeightRatio
+                yOffset = startY + (endY - startY) * frac
+            } else if t < ecg.sDip {
+                let frac = (t - ecg.rPeak) / (ecg.sDip - ecg.rPeak)
+                let startY = -ecg.rPeakHeightRatio
+                let endY = ecg.sDipDepthRatio
+                yOffset = startY + (endY - startY) * frac
+            } else if t < ecg.tWaveStart {
+                let frac = (t - ecg.sDip) / (ecg.tWaveStart - ecg.sDip)
+                let startY = ecg.sDipDepthRatio
+                let endY: CGFloat = 0.0
+                yOffset = startY + (endY - startY) * frac
+            } else if t < ecg.tWavePeak {
+                let frac = (t - ecg.tWaveStart) / (ecg.tWavePeak - ecg.tWaveStart)
+                yOffset = -ecg.tWaveHeightRatio * frac
+            } else if t < ecg.tWaveEnd {
+                let frac = (t - ecg.tWavePeak) / (ecg.tWaveEnd - ecg.tWavePeak)
+                yOffset = -ecg.tWaveHeightRatio * (1.0 - frac)
+            } else {
+                yOffset = 0.0
+            }
+            lut[i] = yOffset
+        }
+        return lut
+    }()
+
+    /// Computes (x, y) point on the ECG curve for a normalized progress in [0, 1] via precomputed LUT
     public static func point(at progress: CGFloat, in size: CGSize, isFlatline: Bool = false) -> CGPoint {
         let t = min(max(progress, 0.0), 1.0)
         let midY = size.height / 2.0
@@ -266,48 +305,185 @@ public struct ECGWaveShape: Shape {
         if isFlatline {
             return CGPoint(x: x, y: midY)
         }
-        let h = size.height
+        let index = Int(round(t * 100.0))
+        let clampedIndex = min(max(index, 0), 100)
+        let yOffset = ecgNormalizedYLUT[clampedIndex]
+        return CGPoint(x: x, y: midY + size.height * yOffset)
+    }
+}
+
+/// Hardware-accelerated offscreen sprite cache for tactical icons and player shapes.
+/// Pre-renders complex vector paths into cached native bitmap textures, allowing the GPU
+/// to perform 100% hardware-accelerated transforms (rotation, scale, translation) with zero CPU path recalculations.
+@MainActor
+public final class TacticalSpriteCache {
+    public static let shared = TacticalSpriteCache()
+    
+    public struct SpriteKey: Hashable {
+        let color: Color
+        let size: Int
+        let typeRaw: String
         
-        let y: CGFloat
-        let ecg = AppConstants.UI.TacticalShapes.ECG.self
-        if t < ecg.pWaveStart {
-            y = midY
-        } else if t < ecg.pWavePeak {
-            let frac = (t - ecg.pWaveStart) / (ecg.pWavePeak - ecg.pWaveStart)
-            y = midY - (h * ecg.pWaveHeightRatio) * frac
-        } else if t < ecg.pWaveEnd {
-            let frac = (t - ecg.pWavePeak) / (ecg.pWaveEnd - ecg.pWavePeak)
-            y = (midY - h * ecg.pWaveHeightRatio) + (h * ecg.pWaveHeightRatio) * frac
-        } else if t < ecg.qDip {
-            let frac = (t - ecg.pWaveEnd) / (ecg.qDip - ecg.pWaveEnd)
-            y = midY + (h * ecg.qDipDepthRatio) * frac
-        } else if t < ecg.rPeak {
-            let frac = (t - ecg.qDip) / (ecg.rPeak - ecg.qDip)
-            let startY = midY + h * ecg.qDipDepthRatio
-            let endY = midY - h * ecg.rPeakHeightRatio
-            y = startY + (endY - startY) * frac
-        } else if t < ecg.sDip {
-            let frac = (t - ecg.rPeak) / (ecg.sDip - ecg.rPeak)
-            let startY = midY - h * ecg.rPeakHeightRatio
-            let endY = midY + h * ecg.sDipDepthRatio
-            y = startY + (endY - startY) * frac
-        } else if t < ecg.tWaveStart {
-            let frac = (t - ecg.sDip) / (ecg.tWaveStart - ecg.sDip)
-            let startY = midY + h * ecg.sDipDepthRatio
-            let endY = midY
-            y = startY + (endY - startY) * frac
-        } else if t < ecg.tWavePeak {
-            let frac = (t - ecg.tWaveStart) / (ecg.tWavePeak - ecg.tWaveStart)
-            let startY = midY - h * ecg.tWaveHeightRatio
-            let endY = midY
-            y = startY + (endY - startY) * frac
-        } else if t < ecg.tWaveEnd {
-            let frac = (t - ecg.tWavePeak) / (ecg.tWaveEnd - ecg.tWavePeak)
-            y = (midY - h * ecg.tWaveHeightRatio) + (h * ecg.tWaveHeightRatio) * frac
-        } else {
-            y = midY
+        public init(color: Color, size: CGFloat, type: String = "") {
+            self.color = color
+            self.size = Int(size.rounded())
+            self.typeRaw = type
         }
-        return CGPoint(x: x, y: y)
+    }
+    
+    private var playerCache = [SpriteKey: Image]()
+    private var leaderCache = [SpriteKey: Image]()
+    private var deadXCache = [SpriteKey: Image]()
+    private var indicatorCache = [SpriteKey: Image]()
+    
+    /// Device native pixel scale — read once at init so sprites are sharp on 3× iPhone displays.
+    /// Guarded to iOS only: UIScreen / UITraitCollection are unavailable on watchOS even though
+    /// UIKit can be imported. Apple Watch displays are 2× OLED so the fallback in each sprite
+    /// method (renderer.scale = 2.0) is correct there.
+    #if os(iOS)
+    private let nativeScale: CGFloat = UIScreen.main.scale
+    #endif
+    
+    private init() {}
+    
+    /// Pre-rendered sprite for regular squad player icon
+    public func playerSprite(color: Color, size: CGFloat = 18) -> Image {
+        let key = SpriteKey(color: color, size: size)
+        if let cached = playerCache[key] {
+            return cached
+        }
+        
+        let view = SquadPlayerShape()
+            .fill(color)
+            .overlay(
+                SquadPlayerShape()
+                    .stroke(Color.black.opacity(0.8), lineWidth: 1.2)
+            )
+            .shadow(color: .black.opacity(0.7), radius: 2)
+            .frame(width: size, height: size)
+            .padding(4)
+        
+        #if canImport(UIKit)
+        let renderer = ImageRenderer(content: view)
+        #if os(iOS)
+        renderer.scale = nativeScale
+        #else
+        renderer.scale = 2.0
+        #endif
+        if let uiImage = renderer.uiImage {
+            let img = Image(uiImage: uiImage)
+            playerCache[key] = img
+            return img
+        }
+        #endif
+        
+        let fallback = Image(systemName: "location.north.fill")
+        playerCache[key] = fallback
+        return fallback
+    }
+    
+    /// Pre-rendered sprite for squad leader command icon
+    public func leaderSprite(color: Color, size: CGFloat = 22) -> Image {
+        let key = SpriteKey(color: color, size: size)
+        if let cached = leaderCache[key] {
+            return cached
+        }
+        
+        let view = SquadLeaderShape()
+            .fill(color)
+            .overlay(
+                SquadLeaderShape()
+                    .stroke(Color.black.opacity(0.8), lineWidth: 1.2)
+            )
+            .shadow(color: .black.opacity(0.7), radius: 2)
+            .frame(width: size, height: size)
+            .padding(4)
+        
+        #if canImport(UIKit)
+        let renderer = ImageRenderer(content: view)
+        #if os(iOS)
+        renderer.scale = nativeScale
+        #else
+        renderer.scale = 2.0
+        #endif
+        if let uiImage = renderer.uiImage {
+            let img = Image(uiImage: uiImage)
+            leaderCache[key] = img
+            return img
+        }
+        #endif
+        
+        let fallback = Image(systemName: "chevron.up.circle.fill")
+        leaderCache[key] = fallback
+        return fallback
+    }
+    
+    /// Pre-rendered sprite for KIA / Downed "X" icon
+    public func deadXSprite(color: Color, size: CGFloat = 18) -> Image {
+        let key = SpriteKey(color: color, size: size)
+        if let cached = deadXCache[key] {
+            return cached
+        }
+        
+        let view = SquadDeadXShape()
+            .fill(color)
+            .overlay(
+                SquadDeadXShape()
+                    .stroke(Color.black.opacity(0.8), lineWidth: 1.0)
+            )
+            .shadow(color: .black.opacity(0.8), radius: 2)
+            .frame(width: size, height: size)
+            .padding(4)
+        
+        #if canImport(UIKit)
+        let renderer = ImageRenderer(content: view)
+        #if os(iOS)
+        renderer.scale = nativeScale
+        #else
+        renderer.scale = 2.0
+        #endif
+        if let uiImage = renderer.uiImage {
+            let img = Image(uiImage: uiImage)
+            deadXCache[key] = img
+            return img
+        }
+        #endif
+        
+        let fallback = Image(systemName: "xmark")
+        deadXCache[key] = fallback
+        return fallback
+    }
+    
+    /// Pre-rendered sprite for static tactical indicators (Enemy & Orders)
+    public func indicatorSprite(type: TacticalIndicatorType, color: Color, size: CGFloat = 16) -> Image {
+        let key = SpriteKey(color: color, size: size, type: type.rawValue)
+        if let cached = indicatorCache[key] {
+            return cached
+        }
+        
+        let view = TacticalIndicatorIcon(type: type, size: size)
+            .foregroundColor(color)
+            .shadow(color: Color.black.opacity(0.8), radius: 1.5, x: 0, y: 0)
+            .frame(width: size, height: size)
+            .padding(4)
+        
+        #if canImport(UIKit)
+        let renderer = ImageRenderer(content: view)
+        #if os(iOS)
+        renderer.scale = nativeScale
+        #else
+        renderer.scale = 2.0
+        #endif
+        if let uiImage = renderer.uiImage {
+            let img = Image(uiImage: uiImage)
+            indicatorCache[key] = img
+            return img
+        }
+        #endif
+        
+        let fallback = Image(systemName: "mappin")
+        indicatorCache[key] = fallback
+        return fallback
     }
 }
 

@@ -35,7 +35,7 @@ extension TacticalMapStyle {
     public var mapKitStyle: MapStyle {
         switch self {
         case .standard:
-            return .standard(elevation: .automatic, pointsOfInterest: .excludingAll)
+            return .standard(elevation: .flat, pointsOfInterest: .excludingAll)
         case .radar:
             return .standard(elevation: .flat, pointsOfInterest: .excludingAll)
         }
@@ -64,9 +64,11 @@ extension TacticalIndicatorType {
         case .watchHere:
             return "eye.fill"
         case .goHere:
-            return "arrow.down"
+            return "arrowtriangle.down"
         case .attackHere:
-            return "crossed.swords"
+            return "bolt"
+        case .protectHere:
+            return "shield"
         case .infantry:
             return "shield.fill"
         case .lightVehicle:
@@ -76,3 +78,13 @@ extension TacticalIndicatorType {
         }
     }
 }
+
+// MARK: - CoreLocation Extensions
+
+#if canImport(CoreLocation)
+extension CLLocationCoordinate2D: @retroactive Equatable {
+    public static func == (lhs: CLLocationCoordinate2D, rhs: CLLocationCoordinate2D) -> Bool {
+        abs(lhs.latitude - rhs.latitude) < 1e-9 && abs(lhs.longitude - rhs.longitude) < 1e-9
+    }
+}
+#endif

@@ -28,51 +28,32 @@ public struct MemberAnnotationView: View {
         // Tactical Vector Marker (center is the exact coordinate and breathing circle center)
         ZStack {
             if isKIA {
-                // KIA / Downed Marker ("X" shape) - Theme color with black detail
-                SquadDeadXShape()
-                    .fill(indicatorColor)
-                    .frame(width: 18, height: 18)
-                    .overlay(
-                        SquadDeadXShape()
-                            .stroke(Color.black.opacity(0.8), lineWidth: 1.0)
-                    )
-                    .shadow(color: .black.opacity(0.8), radius: 2)
+                // KIA / Downed Marker ("X" shape) - Pre-rendered GPU Sprite
+                TacticalSpriteCache.shared.deadXSprite(color: indicatorColor, size: 18)
             } else {
-                // Live Squad Indicator (SL vs Teammate Player) - Theme color + Black breathing effect
+                // Live Squad Indicator (SL vs Teammate Player)
                 if member.isHost {
-                    // Squad Leader (SL) Icon
+                    // Squad Leader (SL) Icon (Pre-rendered Body + Hardware Heading Rotation)
                     ZStack {
-                        SquadLeaderShape()
-                            .fill(indicatorColor)
-                            .overlay(
-                                SquadLeaderShape()
-                                    .stroke(Color.black.opacity(0.8), lineWidth: 1.2)
-                            )
-                            .shadow(color: .black.opacity(0.7), radius: 2)
+                        TacticalSpriteCache.shared.leaderSprite(color: indicatorColor, size: 22)
+                            .rotationEffect(.degrees(member.heading))
                         
-                        // Central heart-rate pulse core in black
-                        SquadPulseCore(heartRate: member.heartRate, tintColor: .black)
+                        // Central heart-rate pulse core (theme color for high visibility)
+                        SquadPulseCore(heartRate: member.heartRate, tintColor: indicatorColor)
                             .frame(width: 6, height: 6)
                     }
-                    .frame(width: 22, height: 22)
-                    .rotationEffect(.degrees(member.heading))
+                    .frame(width: 26, height: 26)
                 } else {
-                    // Regular Squad Player Icon
+                    // Regular Squad Player Icon (Pre-rendered Body + Hardware Heading Rotation)
                     ZStack {
-                        SquadPlayerShape()
-                            .fill(indicatorColor)
-                            .overlay(
-                                SquadPlayerShape()
-                                    .stroke(Color.black.opacity(0.8), lineWidth: 1.2)
-                            )
-                            .shadow(color: .black.opacity(0.7), radius: 2)
+                        TacticalSpriteCache.shared.playerSprite(color: indicatorColor, size: 18)
+                            .rotationEffect(.degrees(member.heading))
                         
-                        // Central heart-rate pulse core in black
-                        SquadPulseCore(heartRate: member.heartRate, tintColor: .black)
+                        // Central heart-rate pulse core (theme color for high visibility)
+                        SquadPulseCore(heartRate: member.heartRate, tintColor: indicatorColor)
                             .frame(width: 6, height: 6)
                     }
-                    .frame(width: 18, height: 18)
-                    .rotationEffect(.degrees(member.heading))
+                    .frame(width: 26, height: 26)
                 }
             }
         }

@@ -10,6 +10,8 @@
 		2A0000020000000000000001 /* RadarMap Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 1A0000010000000000000001 /* RadarMap Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2F0000030000000000000002 /* Resources/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FF0000030000000000000001 /* Resources/Assets.xcassets */; };
 		2F0001000000000000000002 /* RadarMapCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F0001000000000000000001 /* RadarMapCompanionApp.swift */; };
+		2F0001010000000000000002 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001010000000000000001 /* AppConstants.swift */; };
+		2F0001070000000000000002 /* Managers/WatchConnectivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001070000000000000001 /* Managers/WatchConnectivityManager.swift */; };
 		FF0000030000000000000002 /* Resources/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FF0000030000000000000001 /* Resources/Assets.xcassets */; };
 		FF0001000000000000000002 /* RadarMapApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001000000000000000001 /* RadarMapApp.swift */; };
 		FF0001010000000000000002 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001010000000000000001 /* AppConstants.swift */; };
@@ -18,7 +20,7 @@
 		FF0001040000000000000002 /* Managers/DeadReckoningEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001040000000000000001 /* Managers/DeadReckoningEngine.swift */; };
 		FF0001050000000000000002 /* Managers/LocationHeadingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001050000000000000001 /* Managers/LocationHeadingManager.swift */; };
 		FF0001060000000000000002 /* Managers/GameStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001060000000000000001 /* Managers/GameStateManager.swift */; };
-		FF0001070000000000000002 /* Managers/BluetoothDiscoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001070000000000000001 /* Managers/BluetoothDiscoveryManager.swift */; };
+		FF0001070000000000000002 /* Managers/WatchConnectivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001070000000000000001 /* Managers/WatchConnectivityManager.swift */; };
 		FF0001080000000000000002 /* Managers/HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001080000000000000001 /* Managers/HealthKitManager.swift */; };
 		FF0001090000000000000002 /* Managers/NetworkQualityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001090000000000000001 /* Managers/NetworkQualityMonitor.swift */; };
 		FF0001100000000000000002 /* Models/RadarColorTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0001100000000000000001 /* Models/RadarColorTheme.swift */; };
@@ -84,7 +86,7 @@
 		FF0001040000000000000001 /* Managers/DeadReckoningEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/DeadReckoningEngine.swift; sourceTree = "<group>"; };
 		FF0001050000000000000001 /* Managers/LocationHeadingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/LocationHeadingManager.swift; sourceTree = "<group>"; };
 		FF0001060000000000000001 /* Managers/GameStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/GameStateManager.swift; sourceTree = "<group>"; };
-		FF0001070000000000000001 /* Managers/BluetoothDiscoveryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/BluetoothDiscoveryManager.swift; sourceTree = "<group>"; };
+		FF0001070000000000000001 /* Managers/WatchConnectivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/WatchConnectivityManager.swift; sourceTree = "<group>"; };
 		FF0001080000000000000001 /* Managers/HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/HealthKitManager.swift; sourceTree = "<group>"; };
 		FF0001090000000000000001 /* Managers/NetworkQualityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Managers/NetworkQualityMonitor.swift; sourceTree = "<group>"; };
 		FF0001100000000000000001 /* Models/RadarColorTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/RadarColorTheme.swift; sourceTree = "<group>"; };
@@ -146,7 +148,7 @@
 				FF0001040000000000000001 /* Managers/DeadReckoningEngine.swift */,
 				FF0001050000000000000001 /* Managers/LocationHeadingManager.swift */,
 				FF0001060000000000000001 /* Managers/GameStateManager.swift */,
-				FF0001070000000000000001 /* Managers/BluetoothDiscoveryManager.swift */,
+				FF0001070000000000000001 /* Managers/WatchConnectivityManager.swift */,
 				FF0001080000000000000001 /* Managers/HealthKitManager.swift */,
 				FF0001090000000000000001 /* Managers/NetworkQualityMonitor.swift */,
 				FF0001100000000000000001 /* Models/RadarColorTheme.swift */,
@@ -307,7 +309,7 @@
 				FF0001040000000000000002 /* Managers/DeadReckoningEngine.swift in Sources */,
 				FF0001050000000000000002 /* Managers/LocationHeadingManager.swift in Sources */,
 				FF0001060000000000000002 /* Managers/GameStateManager.swift in Sources */,
-				FF0001070000000000000002 /* Managers/BluetoothDiscoveryManager.swift in Sources */,
+				FF0001070000000000000002 /* Managers/WatchConnectivityManager.swift in Sources */,
 				FF0001080000000000000002 /* Managers/HealthKitManager.swift in Sources */,
 				FF0001090000000000000002 /* Managers/NetworkQualityMonitor.swift in Sources */,
 				FF0001100000000000000002 /* Models/RadarColorTheme.swift in Sources */,
@@ -338,6 +340,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				2F0001000000000000000002 /* RadarMapCompanionApp.swift in Sources */,
+				2F0001010000000000000002 /* AppConstants.swift in Sources */,
+				2F0001070000000000000002 /* Managers/WatchConnectivityManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

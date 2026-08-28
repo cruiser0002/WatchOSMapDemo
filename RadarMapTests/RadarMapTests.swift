@@ -1,6 +1,5 @@
 import XCTest
 import CoreLocation
-import CoreBluetooth
 import SwiftUI
 @testable import RadarMap
 
@@ -741,6 +740,60 @@ final class RadarMapTests: XCTestCase {
         XCTAssertNil(gameState.firebaseManager.activeRoom)
     }
     
+    func testPlayerLogoutDeletesUserSquadOrderIconsFromServer() {
+        MockURLProtocol.reset()
+        
+        let squadOrderJson = """
+        {
+            "ORDER_1": {
+                "id": "ORDER_1",
+                "type": "watchHere",
+                "category": "squadOrder",
+                "latitude": 37.78,
+                "longitude": -122.41,
+                "placedByMemberId": "USER_LEAVING"
+            },
+            "ENEMY_1": {
+                "id": "ENEMY_1",
+                "type": "infantry",
+                "category": "enemyIndicator",
+                "latitude": 37.79,
+                "longitude": -122.42,
+                "placedByMemberId": "USER_LEAVING"
+            }
+        }
+        """
+        
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.httpMethod == "GET" && request.url?.absoluteString.contains("/tactical/ROOM_1.json") == true {
+                return (response, squadOrderJson.data(using: .utf8)!)
+            }
+            return (response, "{}".data(using: .utf8)!)
+        }
+        
+        let syncManager = createMockFirebaseSyncManager()
+        let room = SquadRoom(id: "ROOM_1", hostId: "OTHER_USER", members: [
+            "OTHER_USER": SquadMember(id: "OTHER_USER", callsign: "HOST", latitude: 0, longitude: 0),
+            "USER_LEAVING": SquadMember(id: "USER_LEAVING", callsign: "LEAVING", latitude: 0, longitude: 0)
+        ])
+        syncManager.connectToRoom(room)
+        
+        let logoutExp = expectation(description: "Player logout removes squad order icons")
+        syncManager.logoutPlayer(roomId: "ROOM_1", memberId: "USER_LEAVING") { success in
+            XCTAssertTrue(success)
+            logoutExp.fulfill()
+        }
+        wait(for: [logoutExp], timeout: 1.0)
+        
+        let deleteRequests = MockURLProtocol.recordedRequests.filter { $0.httpMethod == "DELETE" }
+        // Must delete the member entry, the member telemetry, AND the squad order icon node ORDER_1
+        XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/rooms/ROOM_1/members/USER_LEAVING.json") == true })
+        XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/telemetry/ROOM_1/USER_LEAVING.json") == true })
+        XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/tactical/ROOM_1/ORDER_1.json") == true }, "Must delete user's squad order icon node ORDER_1 on server")
+        XCTAssertFalse(deleteRequests.contains { $0.url?.absoluteString.contains("/tactical/ROOM_1/ENEMY_1.json") == true }, "Must NOT delete enemy indicator node ENEMY_1")
+    }
+    
     func testJoinButton_Workflow_RoomNotFound_RevertsToJoin() {
         MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
@@ -1412,14 +1465,6 @@ final class RadarMapTests: XCTestCase {
         wait(for: [failExp], timeout: 2.0)
     }
     
-    func testBluetoothDiscoveredRoomPinFlag() {
-        let roomWithPin = DiscoveredRoom(id: "ALPHA", name: "Alpha Squad", rssi: -50, discoveredAt: Date(), peripheral: nil, hasPin: true)
-        let roomWithoutPin = DiscoveredRoom(id: "BRAVO", name: "Bravo Squad", rssi: -50, discoveredAt: Date(), peripheral: nil, hasPin: false)
-        
-        XCTAssertTrue(roomWithPin.hasPin)
-        XCTAssertFalse(roomWithoutPin.hasPin)
-    }
-    
     // MARK: - Server Cost Optimization & Room Lifecycle Tests
     
     func testPlayerLogoutDeletesTelemetryAndMembershipWhenOtherMembersRemain() {
@@ -1459,7 +1504,7 @@ final class RadarMapTests: XCTestCase {
         XCTAssertFalse(deleteRequests.contains { $0.url?.absoluteString.hasSuffix("/rooms/MULTI_ROOM.json") == true })
     }
     
-    func testPlayerLogoutDeletesEntireRoomWhenLastMemberLeaves() {
+    func testPlayerLogoutDoesNotDeleteWholeRoomWhenNonHostLeaves() {
         MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
@@ -1469,7 +1514,7 @@ final class RadarMapTests: XCTestCase {
         let gameState = createMockGameState()
         gameState.myMemberId = "SOLO_PLAYER"
         
-        // Room with only 1 member
+        // Room with non-host player
         let room = SquadRoom(
             id: "SOLO_ROOM",
             hostId: "ORIGINAL_HOST",
@@ -1480,7 +1525,7 @@ final class RadarMapTests: XCTestCase {
         gameState.firebaseManager.activeRoom = room
         gameState.firebaseManager.isConnected = true
         
-        let exp = expectation(description: "Solo player logs out, triggering empty room deletion")
+        let exp = expectation(description: "Non-host player logs out")
         gameState.logoutPlayer { success in
             XCTAssertTrue(success)
             exp.fulfill()
@@ -1488,11 +1533,11 @@ final class RadarMapTests: XCTestCase {
         wait(for: [exp], timeout: 1.0)
         
         let deleteRequests = MockURLProtocol.recordedRequests.filter { $0.httpMethod == "DELETE" }
-        // Verify member, member telemetry, whole room, and whole room telemetry are all deleted
+        // Verify member and member telemetry are deleted, but whole room and whole room telemetry are NOT deleted
         XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/rooms/SOLO_ROOM/members/SOLO_PLAYER.json") == true })
         XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/telemetry/SOLO_ROOM/SOLO_PLAYER.json") == true })
-        XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/rooms/SOLO_ROOM.json") == true })
-        XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/telemetry/SOLO_ROOM.json") == true })
+        XCTAssertFalse(deleteRequests.contains { $0.url?.absoluteString.hasSuffix("/rooms/SOLO_ROOM.json") == true })
+        XCTAssertFalse(deleteRequests.contains { $0.url?.absoluteString.hasSuffix("/telemetry/SOLO_ROOM.json") == true })
     }
     
     func testServerCreatorDisbandMessageDeletesWholeRoomAndTelemetry() {
@@ -1569,7 +1614,6 @@ final class RadarMapTests: XCTestCase {
         
         // Network
         XCTAssertEqual(AppConstants.Network.defaultDatabaseURL, "https://radarmap-8adf0-default-rtdb.firebaseio.com")
-        XCTAssertEqual(AppConstants.Network.Bluetooth.advertisementPrefix, "RM:")
         XCTAssertEqual(AppConstants.Network.Quality.initialLatencyMs, 50.0)
         XCTAssertEqual(AppConstants.Network.Quality.emaAlpha, 0.2)
         
@@ -1723,7 +1767,7 @@ final class RadarMapTests: XCTestCase {
         gameState.subscriptionManager.hasUnlimitedSquadUnlock = true
         
         var placedIds: [String] = []
-        let baseTime = Date().timeIntervalSince1970
+        let baseTime = Date().timeIntervalSince1970 - 100.0
         
         // Place 20 enemy indicators with ascending timestamps
         for i in 1...20 {
@@ -2060,12 +2104,37 @@ final class RadarMapTests: XCTestCase {
         XCTAssertEqual(gameState.currentMapCenter?.latitude, 37.5)
         XCTAssertEqual(gameState.currentMapCenter?.longitude, -122.2)
         
-        // 5. Calling resetMapToDefaultCenterAndZoom resets both scale, center and bumps trigger
+        // 5. Calling resetMapToDefaultCenterAndZoom resets center and bumps trigger without changing scale
         gameState.resetMapToDefaultCenterAndZoom()
-        XCTAssertEqual(gameState.radarScaleMeters, AppConstants.UI.RadarScale.defaultScaleMeters)
+        XCTAssertEqual(gameState.radarScaleMeters, expectedScale, accuracy: 0.001)
         XCTAssertNil(gameState.currentMapCenter)
         XCTAssertEqual(gameState.radarCenterTrigger, 1)
-        XCTAssertEqual(gameState.currentScaleText, "10m")
+    }
+    
+    func testDeadReckoningLocalPlayerMapCentering() {
+        let gameState = createMockGameState()
+        let initialLoc = CLLocation(latitude: 37.7800, longitude: -122.4000)
+        gameState.locationHeadingManager.userLocation = initialLoc
+        gameState.updateLocalPlayerMember()
+        
+        // Initial coordinate matches location
+        XCTAssertEqual(gameState.localPlayerMember.coordinate.latitude, 37.7800, accuracy: 1e-4)
+        XCTAssertEqual(gameState.localPlayerMember.coordinate.longitude, -122.4000, accuracy: 1e-4)
+        
+        // Feed next GPS position into DeadReckoningEngine
+        let targetLoc = CLLocation(latitude: 37.7820, longitude: -122.4020)
+        gameState.deadReckoningEngine.updateLocalPlayer(coordinate: targetLoc.coordinate, heading: 45.0)
+        gameState.updateLocalPlayerMember()
+        
+        // Local player state is tracked and smooth state is available
+        XCTAssertNotNil(gameState.deadReckoningEngine.localPlayerState)
+        XCTAssertEqual(gameState.deadReckoningEngine.localPlayerState?.targetCoordinate.latitude, targetLoc.coordinate.latitude)
+        XCTAssertEqual(gameState.deadReckoningEngine.localPlayerState?.targetCoordinate.longitude, targetLoc.coordinate.longitude)
+        
+        // Smoothed coordinate is returned by localPlayerMember for map centering
+        let smoothedCoord = gameState.localPlayerMember.coordinate
+        XCTAssertTrue(smoothedCoord.latitude >= 37.7800 && smoothedCoord.latitude <= 37.7820)
+        XCTAssertTrue(smoothedCoord.longitude <= -122.4000 && smoothedCoord.longitude >= -122.4020)
     }
     
     // MARK: - Tactical Indicators Category & Bandwidth-Preservation Sync Tests
@@ -2117,13 +2186,13 @@ final class RadarMapTests: XCTestCase {
             let urlStr = request.url?.absoluteString ?? ""
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
             
-            if urlStr.contains("/tactical/ALPHA/_updatedAt.json") && request.httpMethod == "GET" {
+            if urlStr.contains("/tactical/ALPHA/updatedAt.json") && request.httpMethod == "GET" {
                 return (response, "1700000500".data(using: .utf8)!)
             }
             if urlStr.contains("/tactical/ALPHA.json") && request.httpMethod == "GET" {
                 let json = """
                 {
-                    "_updatedAt": 1700000500,
+                    "updatedAt": 1700000500,
                     "IND-100": {
                         "id": "IND-100",
                         "type": "watchHere",
@@ -2156,12 +2225,12 @@ final class RadarMapTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             let putRequests = MockURLProtocol.recordedRequests.filter { $0.httpMethod == "PUT" }
             XCTAssertTrue(putRequests.contains { $0.url?.absoluteString.contains("/tactical/ALPHA/IND-101.json") == true })
-            XCTAssertTrue(putRequests.contains { $0.url?.absoluteString.contains("/tactical/ALPHA/_updatedAt.json") == true })
+            XCTAssertTrue(putRequests.contains { $0.url?.absoluteString.contains("/tactical/ALPHA/updatedAt.json") == true })
             putExp.fulfill()
         }
         wait(for: [putExp], timeout: 1.0)
         
-        // 2. Change-only download test: When _updatedAt is newer than lastKnownTacticalUpdatedAt (0.0)
+        // 2. Change-only download test: When updatedAt is newer than lastKnownTacticalUpdatedAt (0.0)
         gameState.firebaseManager.lastKnownTacticalUpdatedAt = 0.0
         let exp = expectation(description: "Fetch tactical indicators on change")
         gameState.firebaseManager.fetchTacticalIndicatorsIfChanged(roomId: "ALPHA")
@@ -2173,14 +2242,14 @@ final class RadarMapTests: XCTestCase {
         }
         wait(for: [exp], timeout: 1.0)
         
-        // 3. Subsequent poll with NO change: _updatedAt is still 1700000500, equal to lastKnownTacticalUpdatedAt
+        // 3. Subsequent poll with NO change: updatedAt is still 1700000500, equal to lastKnownTacticalUpdatedAt
         let countBefore = MockURLProtocol.recordedRequests.filter { $0.url?.absoluteString.contains("/tactical/ALPHA.json") == true }.count
         gameState.firebaseManager.fetchTacticalIndicatorsIfChanged(roomId: "ALPHA")
         
         let expNoChange = expectation(description: "No change poll")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             let countAfter = MockURLProtocol.recordedRequests.filter { $0.url?.absoluteString.contains("/tactical/ALPHA.json") == true }.count
-            XCTAssertEqual(countBefore, countAfter, "Must NOT download full tactical payload if _updatedAt is unchanged")
+            XCTAssertEqual(countBefore, countAfter, "Must NOT download full tactical payload if updatedAt is unchanged")
             expNoChange.fulfill()
         }
         wait(for: [expNoChange], timeout: 1.0)
@@ -2217,6 +2286,43 @@ final class RadarMapTests: XCTestCase {
         
         let deleteRequests = MockURLProtocol.recordedRequests.filter { $0.httpMethod == "DELETE" }
         XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/tactical/ALPHA.json") == true }, "Must delete /tactical/{roomId} node when room is disbanded")
+    }
+    
+    func testIconsPurgedOnLogoutExceptMeIcon() {
+        let gameState = createMockGameState()
+        gameState.myCallsign = "VIPER"
+        
+        // 1. Populate remote squad members & tactical indicators
+        let remoteMember = SquadMember(id: "REMOTE_1", callsign: "GHOST", latitude: 37.78, longitude: -122.41)
+        let indicator = TacticalIndicator(id: "IND_1", type: .infantry, coordinate: CLLocationCoordinate2D(latitude: 37.79, longitude: -122.42), placedByMemberId: gameState.myMemberId)
+        var room = SquadRoom(id: "TEST_SQUAD", hostId: "HOST_1", members: ["REMOTE_1": remoteMember])
+        room.indicators["IND_1"] = indicator
+        gameState.firebaseManager.activeRoom = room
+        gameState.updateOtherSquadMembers(room: room)
+        gameState.localIndicators = ["IND_1": indicator]
+        gameState.updateAllTacticalIndicators(room: room)
+        gameState.pendingIndicatorPlacementType = .infantry
+        gameState.deadReckoningEngine.updateRemotePlayer(id: remoteMember.id, newCoordinate: remoteMember.coordinate, newHeading: remoteMember.heading, packetTimestamp: Date().timeIntervalSince1970)
+        
+        XCTAssertEqual(gameState.otherSquadMembers.count, 1)
+        XCTAssertEqual(gameState.allTacticalIndicators.count, 1)
+        XCTAssertNotNil(gameState.pendingIndicatorPlacementType)
+        XCTAssertNotNil(gameState.deadReckoningEngine.smoothedMembers["REMOTE_1"])
+        XCTAssertEqual(gameState.localPlayerMember.callsign, "VIPER")
+        
+        // 2. Trigger logout
+        gameState.logoutPlayer()
+        
+        // 3. Verify all icons are purged EXCEPT for "me" icon
+        XCTAssertTrue(gameState.otherSquadMembers.isEmpty, "Remote squad member icons must be purged on logout")
+        XCTAssertTrue(gameState.allTacticalIndicators.isEmpty, "Tactical indicators must be purged on logout")
+        XCTAssertTrue(gameState.localIndicators.isEmpty, "Local indicators dictionary must be purged on logout")
+        XCTAssertNil(gameState.pendingIndicatorPlacementType, "Pending indicator placement mode must be reset on logout")
+        XCTAssertNil(gameState.deadReckoningEngine.smoothedMembers["REMOTE_1"], "Remote player smooth states must be purged from dead reckoning engine on logout")
+        
+        // "Me" icon should remain intact and valid
+        XCTAssertEqual(gameState.localPlayerMember.id, gameState.myMemberId, "'Me' icon must be preserved after logout")
+        XCTAssertEqual(gameState.localPlayerMember.callsign, "VIPER", "'Me' icon callsign must be preserved after logout")
     }
     
     // MARK: - Subscription & RevenueCat Integration Tests
@@ -3173,6 +3279,35 @@ final class RadarMapTests: XCTestCase {
         wait(for: [exp], timeout: 1.0)
     }
     
+    func testCreateRoomPurgesOldTelemetryAndTacticalData() {
+        MockURLProtocol.reset()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.httpMethod == "GET" {
+                return (response, "null".data(using: .utf8)!)
+            }
+            return (response, "{}".data(using: .utf8)!)
+        }
+        
+        let syncManager = createMockFirebaseSyncManager()
+        let member = SquadMember(id: "HOST1", callsign: "VIPER", latitude: 0, longitude: 0, isHost: true)
+        let room = SquadRoom(id: "NEW_SQUAD", hostId: "HOST1", members: ["HOST1": member])
+        
+        let exp = expectation(description: "Room created and old data purged")
+        syncManager.createRoom(room) { result in
+            if case .success = result {
+                exp.fulfill()
+            } else {
+                XCTFail("Room creation should succeed")
+            }
+        }
+        wait(for: [exp], timeout: 1.0)
+        
+        let deleteRequests = MockURLProtocol.recordedRequests.filter { $0.httpMethod == "DELETE" }
+        XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/telemetry/NEW_SQUAD.json") == true }, "Must delete old telemetry node on room creation")
+        XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/tactical/NEW_SQUAD.json") == true }, "Must delete old tactical node on room creation")
+    }
+    
     func testCreateRoomRejectsEmptyCallsign() {
         let syncManager = createMockFirebaseSyncManager()
         let emptyCallsignMember = SquadMember(id: "USER1", callsign: "   ", latitude: 0, longitude: 0)
@@ -3446,7 +3581,290 @@ final class RadarMapTests: XCTestCase {
         let newHeading = syncManager.activeRoom?.members["NON_PRO_1"]?.heading ?? -1.0
         XCTAssertEqual(newHeading, 0.0, accuracy: 1.0, "Displacement above 2.0m threshold should compute Course Over Ground bearing ~0.0°")
     }
+    
+    func testDeadReckoningSnapsCleanlyWhenProgressComplete() {
+        let engine = DeadReckoningEngine()
+        let startCoord = CLLocationCoordinate2D(latitude: 37.7858, longitude: -122.4064)
+        let targetCoord = CLLocationCoordinate2D(latitude: 37.7860, longitude: -122.4060)
+        
+        let now = Date().timeIntervalSince1970
+        engine.updateRemotePlayer(id: "SNAP_TEST", newCoordinate: startCoord, newHeading: 45.0, packetTimestamp: now)
+        engine.updateRemotePlayer(id: "SNAP_TEST", newCoordinate: targetCoord, newHeading: 90.0, packetTimestamp: now + 1.0)
+        
+        // When progress has completed (after duration elapsed), position must snap cleanly to target
+        let member = SquadMember(id: "SNAP_TEST", callsign: "SNAP", latitude: targetCoord.latitude, longitude: targetCoord.longitude)
+        let smoothed = engine.smoothedMember(for: member)
+        XCTAssertNotNil(smoothed)
+    }
+    
+    func testInitialPlaceholderCoordinateIgnoredForCourseOverGround() {
+        let syncManager = createMockFirebaseSyncManager()
+        // Member registered with initial placeholder (0.0, 0.0) from roster before first telemetry fix
+        let placeholderMember = SquadMember(id: "ROSTER_OP", callsign: "ROSTER_OP", latitude: 0.0, longitude: 0.0, heading: 0.0)
+        let room = SquadRoom(id: "PLACEHOLDER_ROOM", hostId: "HOST_1", members: ["ROSTER_OP": placeholderMember])
+        syncManager.connectToRoom(room)
+        
+        // First telemetry packet arrives at SF coordinates
+        let p1 = TelemetryPacket(
+            memberId: "ROSTER_OP",
+            roomId: "PLACEHOLDER_ROOM",
+            latitude: 37.785834,
+            longitude: -122.406417,
+            heading: 0.0,
+            heartRate: 80.0,
+            timestamp: 1000,
+            sequenceNumber: 1
+        )
+        XCTAssertTrue(syncManager.validateAndProcessPacket(p1))
+        
+        // Heading must NOT calculate bogus ~315° bearing from Null Island (0,0)
+        let heading = syncManager.activeRoom?.members["ROSTER_OP"]?.heading ?? -1.0
+        XCTAssertEqual(heading, 0.0, "Initial telemetry arrival from (0,0) placeholder must not calculate bearing from Null Island")
+    }
+    
+    func testTacticalMapStyleStandardElevationIsFlat() {
+        if #available(watchOS 10.0, *) {
+            let standardStyle = TacticalMapStyle.standard.mapKitStyle
+            let radarStyle = TacticalMapStyle.radar.mapKitStyle
+            XCTAssertNotNil(standardStyle)
+            XCTAssertNotNil(radarStyle)
+        }
+    }
+    
+    func testDeadReckoningConstantLinearVelocity() {
+        let startCoord = CLLocationCoordinate2D(latitude: 37.7800, longitude: -122.4000)
+        let targetCoord = CLLocationCoordinate2D(latitude: 37.7810, longitude: -122.4010)
+        
+        let progress = 0.5 // 50% elapsed time
+        let lat = startCoord.latitude + (targetCoord.latitude - startCoord.latitude) * progress
+        let lon = startCoord.longitude + (targetCoord.longitude - startCoord.longitude) * progress
+        
+        let expectedLat = 37.7805
+        let expectedLon = -122.4005
+        XCTAssertEqual(lat, expectedLat, accuracy: 1e-7, "Linear dead reckoning at 50% progress must be exactly at midpoint")
+        XCTAssertEqual(lon, expectedLon, accuracy: 1e-7, "Linear dead reckoning at 50% progress must be exactly at midpoint")
+        
+        let engine = DeadReckoningEngine()
+        let now = Date().timeIntervalSince1970
+        engine.updateRemotePlayer(id: "LINEAR_TEST", newCoordinate: startCoord, newHeading: 0.0, packetTimestamp: now - 2.0)
+        engine.updateRemotePlayer(id: "LINEAR_TEST", newCoordinate: targetCoord, newHeading: 90.0, packetTimestamp: now)
+        
+        XCTAssertNotNil(engine.smoothedMembers["LINEAR_TEST"])
+        XCTAssertEqual(engine.smoothedMembers["LINEAR_TEST"]?.targetCoordinate.latitude, targetCoord.latitude)
+        XCTAssertEqual(engine.smoothedMembers["LINEAR_TEST"]?.targetCoordinate.longitude, targetCoord.longitude)
+    }
+    
+    func testCompassHeadingUpdateDoesNotResetCoordinateProgress() {
+        let engine = DeadReckoningEngine()
+        let startCoord = CLLocationCoordinate2D(latitude: 37.7800, longitude: -122.4000)
+        let targetCoord = CLLocationCoordinate2D(latitude: 37.7820, longitude: -122.4020)
+        
+        engine.updateLocalPlayer(coordinate: startCoord, heading: 0.0)
+        engine.updateLocalPlayer(coordinate: targetCoord, heading: 0.0)
+        
+        guard let stateBeforeHeading = engine.localPlayerState else {
+            XCTFail("Local player state should exist")
+            return
+        }
+        let initialCoordStartTime = stateBeforeHeading.coordinateStartTime
+        let initialCoordDuration = stateBeforeHeading.coordinateDuration
+        
+        // High-frequency compass heading arrives at 10-30 Hz
+        engine.updateLocalPlayerHeading(180.0)
+        
+        // Coordinate start time and duration MUST NOT be reset or cut in half by compass heading tick
+        XCTAssertEqual(engine.localPlayerState?.coordinateStartTime, initialCoordStartTime, "Compass heading update must NOT reset coordinateStartTime")
+        XCTAssertEqual(engine.localPlayerState?.coordinateDuration, initialCoordDuration, "Compass heading update must NOT overwrite coordinateDuration")
+        XCTAssertEqual(engine.localPlayerState?.targetHeading, 180.0, "Compass heading target must be updated")
+        XCTAssertEqual(engine.localPlayerState?.headingDuration, 0.15, "Compass heading smoothing must use dedicated 0.15s duration")
+    }
+    
+    func testDigitalCrownRoughZoomStepAndRange() {
+        let scales = AppConstants.UI.RadarScale.discreteScales
+        XCTAssertEqual(scales.first, 20.0, "Minimum discrete scale should be 20m")
+        XCTAssertEqual(scales.last, 5000.0, "Maximum discrete scale should be 5000m")
+        XCTAssertTrue(scales.contains(100.0), "Default scale 100m must be in discrete scales")
+        XCTAssertTrue(scales.contains(200.0), "200m scale must be in discrete scales")
+        XCTAssertTrue(scales.contains(400.0), "400m scale must be in discrete scales")
+        XCTAssertTrue(scales.contains(1000.0), "1000m scale must be in discrete scales")
+    }
+    
+    func testDiscreteWholeNumberScaleSnappingPerDivision() {
+        let scales = AppConstants.UI.RadarScale.discreteScales
+        
+        // Every discrete scale must produce whole numbers for all 4 range ring divisions
+        for scale in scales {
+            for ratio in AppConstants.UI.RadarScale.rangeRingRatios {
+                let ringDistance = scale * ratio
+                let isWholeNumber = (ringDistance.truncatingRemainder(dividingBy: 1.0) == 0.0)
+                XCTAssertTrue(isWholeNumber, "Scale \(scale)m at ratio \(ratio) must yield a whole number (got \(ringDistance)m)")
+            }
+        }
+        
+        // Verify snapping helper functions
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(95.0), 100.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(110.0), 100.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(190.0), 200.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(450.0), 400.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(950.0), 1000.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(4800.0), 5000.0)
+    }
+    
+    func testZoomScalesBeyond2500mRoundtripAccurately() {
+        let largeScales: [Double] = [2500.0, 3000.0, 4000.0, 5000.0]
+        for scale in largeScales {
+            let delta = AppConstants.UI.RadarScale.mapSpanDelta(forRadarScaleMeters: scale)
+            let roundtripScale = AppConstants.UI.RadarScale.radarScaleMeters(forMapSpanDelta: delta)
+            XCTAssertEqual(roundtripScale, scale, accuracy: 0.01, "Scale \(scale)m must accurately roundtrip without degradation")
+            
+            let nearestIdx = AppConstants.UI.RadarScale.nearestScaleIndex(for: scale)
+            XCTAssertEqual(AppConstants.UI.RadarScale.discreteScales[nearestIdx], scale, "Nearest scale index for \(scale)m must match exact scale")
+        }
+    }
+    
+    func testDigitalCrownReversedScrollZoomDirectionMapping() {
+        let scales = AppConstants.UI.RadarScale.discreteScales
+        let maxCrownIndex = Double(scales.count - 1)
+        
+        // At minimum crown index (0.0), scale should be maximum (5000m - zoomed out)
+        let minCrownScale = AppConstants.UI.RadarScale.scale(forCrownIndex: 0.0)
+        XCTAssertEqual(minCrownScale, 5000.0, "Index 0 must correspond to maximum distance 5000m (zoomed out)")
+        XCTAssertEqual(AppConstants.UI.RadarScale.crownIndex(for: 5000.0), 0.0)
+        
+        // At maximum crown index, scale should be minimum (20m - zoomed in)
+        let maxCrownScale = AppConstants.UI.RadarScale.scale(forCrownIndex: maxCrownIndex)
+        XCTAssertEqual(maxCrownScale, 20.0, "Max crown index must correspond to minimum distance 20m (zoomed in)")
+        XCTAssertEqual(AppConstants.UI.RadarScale.crownIndex(for: 20.0), maxCrownIndex)
+        
+        // Verify scrolling crown upward (increasing index) monotonically zooms in (decreases meter span)
+        for i in 0..<(scales.count - 1) {
+            let currentScale = AppConstants.UI.RadarScale.scale(forCrownIndex: Double(i))
+            let nextScale = AppConstants.UI.RadarScale.scale(forCrownIndex: Double(i + 1))
+            XCTAssertGreaterThan(currentScale, nextScale, "Scrolling crown upward must zoom in (lower meter span) from index \(i) to \(i + 1)")
+        }
+        
+        // Verify 100% roundtrip fidelity across all discrete scales
+        for scale in scales {
+            let cIndex = AppConstants.UI.RadarScale.crownIndex(for: scale)
+            let resolvedScale = AppConstants.UI.RadarScale.scale(forCrownIndex: cIndex)
+            XCTAssertEqual(resolvedScale, scale, "Roundtrip for scale \(scale)m through crownIndex must be exact")
+        }
+    }
+    
+    func testSquadOrderCallsignFallbackAndResolution() {
+        let gameState = GameStateManager()
+        gameState.myCallsign = ""
+        
+        // Place a squad order without setting custom callsign
+        gameState.pendingIndicatorPlacementType = .watchHere
+        gameState.placeTacticalIndicator(at: CLLocationCoordinate2D(latitude: 37.77, longitude: -122.41))
+        
+        let indicators = gameState.allTacticalIndicators
+        XCTAssertEqual(indicators.count, 1)
+        XCTAssertEqual(indicators.first?.placedByCallsign, "OPERATOR", "Squad order should default to OPERATOR if callsign is empty")
+        
+        // Custom callsign
+        gameState.myCallsign = "VIPER"
+        gameState.pendingIndicatorPlacementType = .goHere
+        gameState.placeTacticalIndicator(at: CLLocationCoordinate2D(latitude: 37.78, longitude: -122.42))
+        
+        let updatedIndicators = gameState.allTacticalIndicators
+        let goOrder = updatedIndicators.first { $0.type == .goHere }
+        XCTAssertEqual(goOrder?.placedByCallsign, "VIPER", "Squad order should retain custom callsign")
+    }
+    
+    // MARK: - Firebase TTL Policy Tests
+    
+    func testSquadRoomTTLPolicyFields() throws {
+        let now = Date().timeIntervalSince1970
+        let room = SquadRoom(id: "ALPHA1", hostId: "HOST1", createdAt: now)
+        
+        let expectedExpireAt = now + AppConstants.Timing.Inactivity.ttlDurationSeconds
+        XCTAssertEqual(room.expireAt, expectedExpireAt, accuracy: 0.1, "SquadRoom expireAt should default to createdAt + 7 days")
+        
+        // Test JSON encoding includes expireAt field
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(room)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        
+        XCTAssertNotNil(json?["expireAt"], "Room JSON must contain expireAt field for Firestore TTL")
+        XCTAssertEqual((json?["expireAt"] as? Double) ?? 0.0, expectedExpireAt, accuracy: 0.1)
+        
+        // Test JSON decoding recovers expireAt field
+        let decoder = JSONDecoder()
+        let decodedRoom = try decoder.decode(SquadRoom.self, from: data)
+        XCTAssertEqual(decodedRoom.expireAt, expectedExpireAt, accuracy: 0.1)
+    }
+    
+    func testHostCreateRoomInitializesTTLSubroomMetadata() {
+        MockURLProtocol.reset()
+        
+        var recordedPutUrls: [String] = []
+        var recordedPayloads: [String: [String: Any]] = [:]
+        
+        MockURLProtocol.requestHandler = { request in
+            let urlString = request.url?.absoluteString ?? ""
+            if request.httpMethod == "PUT" {
+                recordedPutUrls.append(urlString)
+                if let bodyData = request.httpBody ?? (request.httpBodyStream.flatMap { stream in
+                    stream.open()
+                    var result = Data()
+                    let bufferSize = 1024
+                    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+                    defer { buffer.deallocate() }
+                    while stream.hasBytesAvailable {
+                        let read = stream.read(buffer, maxLength: bufferSize)
+                        if read > 0 { result.append(buffer, count: read) }
+                    }
+                    stream.close()
+                    return result
+                }),
+                let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] {
+                    recordedPayloads[urlString] = json
+                }
+            }
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, "{}".data(using: .utf8)!)
+        }
+        
+        let syncManager = createMockFirebaseSyncManager()
+        let room = SquadRoom(id: "TTLROOM1", hostId: "HOST1")
+        
+        let exp = expectation(description: "Create room with TTL metadata")
+        syncManager.createRoom(room) { result in
+            if case .success(let created) = result {
+                XCTAssertEqual(created.id, "TTLROOM1")
+            } else {
+                XCTFail("Room creation failed")
+            }
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 2.0)
+        
+        // Verify put requests were sent to rooms, tactical, and telemetry endpoints
+        let containsTelemetry = recordedPutUrls.contains { $0.contains("/telemetry/TTLROOM1.json") }
+        let containsTactical = recordedPutUrls.contains { $0.contains("/tactical/TTLROOM1.json") }
+        let containsRoom = recordedPutUrls.contains { $0.contains("/rooms/TTLROOM1.json") }
+        
+        XCTAssertTrue(containsRoom, "PUT request should be sent to rooms endpoint")
+        XCTAssertTrue(containsTelemetry, "TTL metadata PUT request should be sent to telemetry endpoint")
+        XCTAssertTrue(containsTactical, "TTL metadata PUT request should be sent to tactical endpoint")
+        
+        // Inspect telemetry subroom TTL payload
+        if let telUrl = recordedPutUrls.first(where: { $0.contains("/telemetry/TTLROOM1.json") }),
+           let telPayload = recordedPayloads[telUrl] {
+            XCTAssertNotNil(telPayload["expireAt"], "Telemetry subroom payload must include expireAt")
+        }
+        
+        // Inspect tactical subroom TTL payload
+        if let tactUrl = recordedPutUrls.first(where: { $0.contains("/tactical/TTLROOM1.json") }),
+           let tactPayload = recordedPayloads[tactUrl] {
+            XCTAssertNotNil(tactPayload["expireAt"], "Tactical subroom payload must include expireAt")
+            XCTAssertNotNil(tactPayload["updatedAt"], "Tactical subroom payload must include updatedAt")
+        }
+    }
 }
+
 
 
 

@@ -101,44 +101,43 @@ public struct TacticalTankShape: Shape {
     }
 }
 
-/// Sword / Crossed Swords Vector Shape for "Attack here"
-public struct TacticalSwordShape: Shape {
+/// Crosshair Vector Shape for "Target" (formerly "Attack here")
+public struct TacticalCrosshairShape: Shape {
     public init() {}
     
     public func path(in rect: CGRect) -> Path {
         var path = Path()
         let w = rect.width
         let h = rect.height
+        let cx = rect.midX
+        let cy = rect.midY
+        let radius = min(w, h) * 0.42
+        let innerRadius = min(w, h) * 0.20
+        let lineWidth = max(1.5, min(w, h) * 0.08)
         
-        // First sword (diagonal from bottom-left to top-right)
-        path.move(to: CGPoint(x: w * 0.88, y: h * 0.12))
-        path.addLine(to: CGPoint(x: w * 0.84, y: h * 0.24))
-        path.addLine(to: CGPoint(x: w * 0.40, y: h * 0.68))
-        path.addLine(to: CGPoint(x: w * 0.34, y: h * 0.64))
-        path.addLine(to: CGPoint(x: w * 0.26, y: h * 0.72))
-        path.addLine(to: CGPoint(x: w * 0.12, y: h * 0.86))
-        path.addLine(to: CGPoint(x: w * 0.14, y: h * 0.88))
-        path.addLine(to: CGPoint(x: w * 0.28, y: h * 0.74))
-        path.addLine(to: CGPoint(x: w * 0.36, y: h * 0.66))
-        path.addLine(to: CGPoint(x: w * 0.76, y: h * 0.16))
-        path.closeSubpath()
+        // Outer circle ring
+        path.addEllipse(in: CGRect(x: cx - radius, y: cy - radius, width: radius * 2, height: radius * 2))
+        path.addEllipse(in: CGRect(x: cx - (radius - lineWidth), y: cy - (radius - lineWidth), width: (radius - lineWidth) * 2, height: (radius - lineWidth) * 2))
         
-        // Second sword (diagonal from bottom-right to top-left)
-        path.move(to: CGPoint(x: w * 0.12, y: h * 0.12))
-        path.addLine(to: CGPoint(x: w * 0.16, y: h * 0.24))
-        path.addLine(to: CGPoint(x: w * 0.60, y: h * 0.68))
-        path.addLine(to: CGPoint(x: w * 0.66, y: h * 0.64))
-        path.addLine(to: CGPoint(x: w * 0.74, y: h * 0.72))
-        path.addLine(to: CGPoint(x: w * 0.88, y: h * 0.86))
-        path.addLine(to: CGPoint(x: w * 0.86, y: h * 0.88))
-        path.addLine(to: CGPoint(x: w * 0.72, y: h * 0.74))
-        path.addLine(to: CGPoint(x: w * 0.64, y: h * 0.66))
-        path.addLine(to: CGPoint(x: w * 0.24, y: h * 0.16))
-        path.closeSubpath()
+        // Crosshair reticle lines (top, bottom, left, right ticks)
+        // Top tick
+        path.addRect(CGRect(x: cx - lineWidth / 2, y: cy - radius * 1.15, width: lineWidth, height: radius * 1.15 - innerRadius))
+        // Bottom tick
+        path.addRect(CGRect(x: cx - lineWidth / 2, y: cy + innerRadius, width: lineWidth, height: radius * 1.15 - innerRadius))
+        // Left tick
+        path.addRect(CGRect(x: cx - radius * 1.15, y: cy - lineWidth / 2, width: radius * 1.15 - innerRadius, height: lineWidth))
+        // Right tick
+        path.addRect(CGRect(x: cx + innerRadius, y: cy - lineWidth / 2, width: radius * 1.15 - innerRadius, height: lineWidth))
+        
+        // Center dot
+        let dotR = min(w, h) * 0.08
+        path.addEllipse(in: CGRect(x: cx - dotR, y: cy - dotR, width: dotR * 2, height: dotR * 2))
         
         return path
     }
 }
+
+public typealias TacticalSwordShape = TacticalCrosshairShape
 
 // MARK: - Tactical Indicator Icon Component
 
@@ -159,12 +158,17 @@ public struct TacticalIndicatorIcon: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             case .goHere:
-                Image(systemName: "arrow.down")
+                Image(systemName: "arrowtriangle.down")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .fontWeight(.black)
             case .attackHere:
-                TacticalSwordShape()
+                Image(systemName: "bolt")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            case .protectHere:
+                Image(systemName: "shield")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
             case .infantry:
                 TacticalHelmetShape()
             case .lightVehicle:
@@ -200,9 +204,8 @@ public struct TacticalIndicatorOverlayView: View {
     }
     
     /// Calculate color taking into account the 5-minute fade to gray rule for enemy indicators
-    private var markerColor: Color {
+    private func markerColor(fadeFactor: Double) -> Color {
         if indicator.category == .enemyIndicator {
-            let fadeFactor = indicator.grayFadeFactor()
             if fadeFactor >= 1.0 {
                 return Color.gray.opacity(0.85)
             } else if fadeFactor > 0.0 {
@@ -218,6 +221,10 @@ public struct TacticalIndicatorOverlayView: View {
         let ringSize: CGFloat = 24
         let touchTargetSize: CGFloat = 44
         let fadeFactor = indicator.grayFadeFactor()
+        // Use the raw radar color for the cache key so it stays stable across the 5-min fade.
+        // The grayscale desaturation is applied as a GPU-side modifier on the returned Image,
+        // which is cheaper and doesn't defeat the sprite cache.
+        let color = markerColor(fadeFactor: fadeFactor)   // used only for the label overlay below
         
         ZStack {
             // Delete countdown progress ring only visible during hold
@@ -232,26 +239,32 @@ public struct TacticalIndicatorOverlayView: View {
                     .frame(width: ringSize, height: ringSize)
             }
             
-            // Center Tactical Indicator Icon (No big opaque circle background)
-            TacticalIndicatorIcon(type: indicator.type, size: iconSize)
-                .foregroundColor(markerColor)
-                .shadow(color: Color.black.opacity(0.8), radius: 1.5, x: 0, y: 0)
+            // Center Tactical Indicator Icon (Pre-rendered Hardware GPU Texture)
+            // Cache key uses `radarColor` (stable) — grayscale fade handled by GPU modifier below.
+            TacticalSpriteCache.shared.indicatorSprite(type: indicator.type, color: radarColor, size: iconSize)
                 .grayscale(indicator.category == .enemyIndicator ? fadeFactor : 0.0)
         }
         .frame(width: touchTargetSize, height: touchTargetSize)
         .contentShape(Rectangle())
         .overlay(alignment: .top) {
-            if let callsign = indicator.placedByCallsign, !callsign.isEmpty {
+            if indicator.category == .squadOrder {
+                let callsign: String = {
+                    if let cs = indicator.placedByCallsign?.trimmingCharacters(in: .whitespacesAndNewlines), !cs.isEmpty {
+                        return cs
+                    }
+                    return "OPERATOR"
+                }()
+                
                 Text(callsign)
                     .font(.system(size: 7, weight: .bold, design: .monospaced))
-                    .foregroundColor(markerColor)
+                    .foregroundColor(color)
                     .lineLimit(1)
                     .padding(.horizontal, 2.5)
                     .padding(.vertical, 0.5)
                     .background(Color.black.opacity(0.85))
                     .cornerRadius(2)
                     .fixedSize()
-                    .offset(y: 34)
+                    .offset(y: 32)
             }
         }
         .highPriorityGesture(

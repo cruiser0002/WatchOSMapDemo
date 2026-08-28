@@ -91,7 +91,13 @@ public final class LocationHeadingManager: NSObject, ObservableObject, CLLocatio
             hasValidCourse: hasValidCourse
         )
         
-        self.blendedHeading = newHeading
+        // Dead-band: suppress publish when heading hasn't meaningfully changed.
+        // Compass hardware fires at up to 60 Hz; without this guard every callback pumps
+        // objectWillChange and the full downstream Combine graph even when stationary.
+        let epsilon = 0.1  // degrees
+        if abs(newHeading - blendedHeading) > epsilon {
+            self.blendedHeading = newHeading
+        }
     }
     
     private let locationManager = CLLocationManager()
@@ -126,7 +132,6 @@ public final class LocationHeadingManager: NSObject, ObservableObject, CLLocatio
         #endif
         isUpdating = true
     }
-    
     public func stopUpdates() {
         locationManager.stopUpdatingLocation()
         #if os(watchOS) || os(iOS)
@@ -135,6 +140,28 @@ public final class LocationHeadingManager: NSObject, ObservableObject, CLLocatio
         }
         #endif
         isUpdating = false
+    }
+    
+    public func setHighAccuracy(_ high: Bool) {
+        locationManager.desiredAccuracy = high ? kCLLocationAccuracyBestForNavigation : kCLLocationAccuracyHundredMeters
+        locationManager.distanceFilter = high ? kCLDistanceFilterNone : 50.0
+        #if os(watchOS) || os(iOS)
+        if CLLocationManager.headingAvailable() {
+            if high && isUpdating {
+                locationManager.startUpdatingHeading()
+            } else {
+                locationManager.stopUpdatingHeading()
+            }
+        }
+        #endif
+    }
+    
+    public func enterLowPowerMode() {
+        setHighAccuracy(false)
+    }
+    
+    public func exitLowPowerMode() {
+        setHighAccuracy(true)
     }
     
     // MARK: - CLLocationManagerDelegate

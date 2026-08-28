@@ -1,9 +1,69 @@
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { logger } = require("firebase-functions");
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 
-admin.initializeApp();
+admin.initializeApp({
+  databaseURL: "https://radarmap-8adf0-default-rtdb.firebaseio.com"
+});
 
 const db = admin.database();
+
+/**
+ * 2nd-Gen Scheduled Cloud Function: cleanExpiredRooms
+ * Runs every hour to query and purge expired rooms and their corresponding
+ * nodes across /rooms, /tactical, and /telemetry sub-trees in an atomic multi-path update.
+ */
+exports.cleanExpiredRooms = onSchedule(
+  {
+    schedule: "every 1 hours",
+    timeZone: "UTC",
+    region: "us-central1"
+  },
+  async (event) => {
+    const nowSeconds = Date.now() / 1000;
+    logger.info(`Running cleanExpiredRooms. Checking for rooms with expireAt <= ${nowSeconds} (${new Date().toISOString()})`);
+
+    try {
+      const snapshot = await db
+        .ref("/rooms")
+        .orderByChild("expireAt")
+        .endAt(nowSeconds)
+        .once("value");
+
+      if (!snapshot.exists()) {
+        logger.info("No expired rooms found.");
+        return;
+      }
+
+      const updates = {};
+      let expiredCount = 0;
+
+      snapshot.forEach((childSnap) => {
+        const roomId = childSnap.key;
+        const roomData = childSnap.val() || {};
+
+        if (roomData.expireAt !== undefined && roomData.expireAt !== null && Number(roomData.expireAt) <= nowSeconds) {
+          logger.info(`Queueing expired room ${roomId} for deletion (expireAt: ${roomData.expireAt})`);
+          updates[`/rooms/${roomId}`] = null;
+          updates[`/tactical/${roomId}`] = null;
+          updates[`/telemetry/${roomId}`] = null;
+          expiredCount++;
+        }
+      });
+
+      if (expiredCount > 0) {
+        await db.ref().update(updates);
+        logger.info(`Successfully deleted ${expiredCount} expired room(s) across /rooms, /tactical, and /telemetry.`);
+      } else {
+        logger.info("Snapshot returned keys, but none matched expiration condition.");
+      }
+    } catch (err) {
+      logger.error("Error during cleanExpiredRooms execution:", err);
+      throw err;
+    }
+  }
+);
 
 /**
  * 1) Empty Room Cleanup Trigger:
@@ -13,6 +73,11 @@ const db = admin.database();
 exports.cleanupEmptyRoom = functions.database
   .ref("/rooms/{roomId}/members")
   .onWrite(async (change, context) => {
+    // Early exit if the data was deleted (e.g. room was purged) to prevent cascading writes
+    if (!change.after.exists()) {
+      return null;
+    }
+
     const roomId = context.params.roomId;
     const membersData = change.after.val();
 
@@ -85,3 +150,4 @@ exports.scheduledDailyCleanup = functions.pubsub
 
     return null;
   });
+

@@ -11,9 +11,9 @@ public enum TacticalIndicatorCategory: String, Codable, CaseIterable, Identifiab
     public var title: String {
         switch self {
         case .squadOrder:
-            return "Squad Orders"
+            return "Team Orders"
         case .enemyIndicator:
-            return "Enemy Indicators"
+            return "Tac Indicators"
         }
     }
 }
@@ -24,6 +24,7 @@ public enum TacticalIndicatorType: String, Codable, CaseIterable, Identifiable {
     case watchHere = "watchHere"
     case goHere = "goHere"
     case attackHere = "attackHere"
+    case protectHere = "protectHere"
     
     // Enemy Indicators
     case infantry = "infantry"
@@ -34,7 +35,7 @@ public enum TacticalIndicatorType: String, Codable, CaseIterable, Identifiable {
     
     public var category: TacticalIndicatorCategory {
         switch self {
-        case .watchHere, .goHere, .attackHere:
+        case .watchHere, .goHere, .attackHere, .protectHere:
             return .squadOrder
         case .infantry, .lightVehicle, .heavyVehicle:
             return .enemyIndicator
@@ -48,9 +49,11 @@ public enum TacticalIndicatorType: String, Codable, CaseIterable, Identifiable {
         case .goHere:
             return "Go"
         case .attackHere:
-            return "Attack"
+            return "Target"
+        case .protectHere:
+            return "Protect"
         case .infantry:
-            return "Infantry"
+            return "Personnel"
         case .lightVehicle:
             return "Light vehicle"
         case .heavyVehicle:

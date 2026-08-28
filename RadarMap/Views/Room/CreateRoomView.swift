@@ -104,7 +104,7 @@ public struct CreateRoomView: View {
                     }) {
                         HStack {
                             Image(systemName: "antenna.radiowaves.left.and.right")
-                            Text("Host & Broadcast")
+                            Text("Host Squad")
                                 .font(.system(size: 12, weight: .bold))
                         }
                         .frame(maxWidth: .infinity)
@@ -137,6 +137,21 @@ public struct CreateRoomView: View {
                 PaywallView()
                     .environmentObject(gameState)
             }
+            .onChange(of: gameState.firebaseManager.activeRoom != nil) { _, inRoom in
+                if inRoom {
+                    dismiss()
+                }
+            }
+            .onChange(of: gameState.savedRoomName) { _, newRoom in
+                if roomName != newRoom {
+                    roomName = newRoom
+                }
+            }
+            .onChange(of: gameState.savedPin) { _, newPin in
+                if roomPassword != newPin {
+                    roomPassword = newPin
+                }
+            }
             .onAppear {
                 if roomName.isEmpty {
                     roomName = gameState.savedRoomName
@@ -148,3 +163,4 @@ public struct CreateRoomView: View {
         }
     }
 }
+

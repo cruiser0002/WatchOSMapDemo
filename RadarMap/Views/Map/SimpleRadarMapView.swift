@@ -11,8 +11,7 @@ public struct SimpleRadarMapView: View {
     public init() {}
     
     private var otherSquadMembers: [SquadMember] {
-        guard let room = gameState.firebaseManager.activeRoom else { return [] }
-        return room.members.values.filter { $0.id != gameState.myMemberId }
+        gameState.otherSquadMembers
     }
     
     public var body: some View {
@@ -105,6 +104,7 @@ public struct SimpleRadarMapView: View {
                         }
                     )
                     .position(x: centerPoint.x + offset.x, y: centerPoint.y + offset.y)
+                    .transaction { $0.animation = nil }
                     .zIndex(5)
                 }
                 
@@ -132,11 +132,18 @@ public struct SimpleRadarMapView: View {
                 }
             }
             .gesture(
-                DragGesture()
+                DragGesture(minimumDistance: 15)
                     .onChanged { value in
                         dragOffset = value.translation
                     }
                     .onEnded { value in
+                        let dist = hypot(value.translation.width, value.translation.height)
+                        guard dist >= 15 else {
+                            withAnimation(.easeOut(duration: 0.15)) {
+                                dragOffset = .zero
+                            }
+                            return
+                        }
                         let endCenter = coordinate(
                             for: CGPoint(x: screenCenter.x - value.translation.width, y: screenCenter.y - value.translation.height),
                             centerScreenPoint: screenCenter,
@@ -145,7 +152,18 @@ public struct SimpleRadarMapView: View {
                             metersPerDegreeLon: metersPerDegreeLon,
                             pointsPerMeter: pointsPerMeter
                         )
-                        gameState.currentMapCenter = endCenter
+                        
+                        // Flat-earth distance check — reuses the scale factors already
+                        // computed above; far cheaper than two CLLocation Vincenty allocations
+                        // for a simple 10m threshold comparison.
+                        let dLat = endCenter.latitude - meMember.coordinate.latitude
+                        let dLon = endCenter.longitude - meMember.coordinate.longitude
+                        let approxMeters = hypot(dLat * metersPerDegreeLat, dLon * metersPerDegreeLon)
+                        if approxMeters > 10.0 {
+                            gameState.currentMapCenter = endCenter
+                        } else {
+                            gameState.currentMapCenter = nil
+                        }
                         dragOffset = .zero
                     }
             )
@@ -164,12 +182,20 @@ public struct SimpleRadarMapView: View {
             .onChange(of: gameState.radarCenterTrigger) { _, _ in
                 withAnimation(.easeInOut(duration: 0.25)) {
                     dragOffset = .zero
-                    baseScale = AppConstants.UI.RadarScale.defaultScaleMeters
+                    baseScale = gameState.radarScaleMeters
+                }
+            }
+            .onChange(of: gameState.currentMapCenter == nil) { _, isCentered in
+                if isCentered {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        dragOffset = .zero
+                    }
                 }
             }
             .onAppear {
                 baseScale = gameState.radarScaleMeters
             }
+            .focusable(false)
         }
     }
     

@@ -94,15 +94,18 @@ public struct SettingsView: View {
                 PaywallView()
                     .environmentObject(gameState)
             }
-            .alert(isPresented: Binding(
-                get: { gameState.errorMessage != nil },
-                set: { if !$0 { gameState.errorMessage = nil } }
-            )) {
-                Alert(
-                    title: Text("Error"),
-                    message: Text(gameState.errorMessage ?? "An error occurred."),
-                    dismissButton: .default(Text("OK"))
+            .alert(
+                "Error",
+                isPresented: Binding(
+                    get: { gameState.errorMessage != nil },
+                    set: { if !$0 { gameState.errorMessage = nil } }
                 )
+            ) {
+                Button("OK", role: .cancel) {
+                    gameState.errorMessage = nil
+                }
+            } message: {
+                Text(gameState.errorMessage ?? "An error occurred.")
             }
             .onChange(of: focusedField) { _, newField in
                 if let field = newField {
@@ -114,6 +117,21 @@ public struct SettingsView: View {
             .onChange(of: isBusy) { _, busy in
                 if busy {
                     focusedField = nil
+                }
+            }
+            .onChange(of: gameState.myCallsign) { _, newCallsign in
+                if callsignInput != newCallsign {
+                    callsignInput = newCallsign
+                }
+            }
+            .onChange(of: gameState.savedRoomName) { _, newRoom in
+                if gameState.firebaseManager.activeRoom == nil && squadName != newRoom {
+                    squadName = newRoom
+                }
+            }
+            .onChange(of: gameState.savedPin) { _, newPin in
+                if squadPin != newPin {
+                    squadPin = newPin
                 }
             }
         }

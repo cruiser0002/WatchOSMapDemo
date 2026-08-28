@@ -32,64 +32,8 @@ public struct RoomDiscoveryView: View {
                     }
                 }
                 
-                // BLE Scanner Status Section
-                Section(header: Text("Nearby BLE Radar").font(.system(size: 9))) {
-                    if gameState.bluetoothManager.isScanning {
-                        HStack {
-                            ProgressView()
-                                .scaleEffect(0.6)
-                            Text("Scanning for squads...")
-                                .font(.system(size: 10))
-                                .foregroundColor(.gray)
-                        }
-                    }
-                    
-                    if gameState.bluetoothManager.discoveredRooms.isEmpty && !gameState.bluetoothManager.isScanning {
-                        Text("No nearby squads found.")
-                            .font(.system(size: 10))
-                            .foregroundColor(.gray)
-                    }
-                    
-                    ForEach(gameState.bluetoothManager.discoveredRooms) { room in
-                        Button(action: {
-                            let pin = manualPin.trimmingCharacters(in: .whitespacesAndNewlines)
-                            gameState.joinRoom(id: room.id, name: room.name, pin: pin.isEmpty ? nil : pin) { success in
-                                if success {
-                                    dismiss()
-                                }
-                            }
-                        }) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 4) {
-                                        Text(room.name)
-                                            .font(.system(size: 11, weight: .bold))
-                                            .foregroundColor(.white)
-                                        if room.hasPin {
-                                            Image(systemName: "lock.fill")
-                                                .font(.system(size: 9))
-                                                .foregroundColor(.yellow)
-                                        }
-                                    }
-                                    
-                                    Text("Code: \(room.id)")
-                                        .font(.system(size: 9, design: .monospaced))
-                                        .foregroundColor(.green)
-                                }
-                                
-                                Spacer()
-                                
-                                // Signal strength icon
-                                Image(systemName: "antenna.radiowaves.left.and.right")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.cyan)
-                            }
-                        }
-                    }
-                }
-                
                 // Direct Room Entry Section
-                Section(header: Text("Direct Join").font(.system(size: 9))) {
+                Section(header: Text("Join Squad").font(.system(size: 9))) {
                     TextField("Squad Name", text: $manualRoomCode)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundColor((gameState.isJoining || gameState.firebaseManager.isConnected) ? .gray : .primary)
@@ -174,9 +118,18 @@ public struct RoomDiscoveryView: View {
                     dismiss()
                 }
             }
+            .onChange(of: gameState.savedRoomName) { _, newRoom in
+                if manualRoomCode != newRoom {
+                    manualRoomCode = newRoom
+                }
+            }
+            .onChange(of: gameState.savedPin) { _, newPin in
+                if manualPin != newPin {
+                    manualPin = newPin
+                }
+            }
         }
         .onAppear {
-            gameState.bluetoothManager.startScanning()
             if manualRoomCode.isEmpty {
                 manualRoomCode = gameState.savedRoomName
             }
@@ -184,8 +137,6 @@ public struct RoomDiscoveryView: View {
                 manualPin = gameState.savedPin
             }
         }
-        .onDisappear {
-            gameState.bluetoothManager.stopScanning()
-        }
     }
 }
+

@@ -42,8 +42,6 @@
     <string>Radar Map reads your heart rate to stream live squad biometric stress levels to teammates.</string>
     <key>NSHealthUpdateUsageDescription</key>
     <string>Radar Map records tactical workout sessions to maintain live heart rate streaming.</string>
-    <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>Radar Map uses Bluetooth Low Energy for nearby squad room discovery and peer synchronization.</string>
     <key>WKBackgroundModes</key>
     <array>
         <string>workout-processing</string>

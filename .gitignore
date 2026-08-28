@@ -4,3 +4,8 @@
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 Config.xcconfig
+node_modules/
+functions/node_modules/
+__pycache__/
+*.pyc
+

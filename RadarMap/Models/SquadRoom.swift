@@ -6,6 +6,7 @@ public struct SquadRoom: Identifiable, Codable, Equatable {
     public var maxCapacity: Int           // 4 for free tier, 12 for Pro unlock
     public var createdAt: TimeInterval
     public var lastActivityTimestamp: TimeInterval
+    public var expireAt: TimeInterval     // TTL expiration timestamp for Firebase TTL deletion policy
     public var hasPin: Bool
     public var pinHash: String?
     public var members: [String: SquadMember] // memberId -> SquadMember
@@ -21,6 +22,7 @@ public struct SquadRoom: Identifiable, Codable, Equatable {
         pinHash: String? = nil,
         createdAt: TimeInterval = Date().timeIntervalSince1970,
         lastActivityTimestamp: TimeInterval? = nil,
+        expireAt: TimeInterval? = nil,
         members: [String: SquadMember] = [:],
         indicators: [String: TacticalIndicator] = [:]
     ) {
@@ -30,13 +32,15 @@ public struct SquadRoom: Identifiable, Codable, Equatable {
         self.hasPin = hasPin
         self.pinHash = pinHash
         self.createdAt = createdAt
-        self.lastActivityTimestamp = lastActivityTimestamp ?? createdAt
+        let activeTs = lastActivityTimestamp ?? createdAt
+        self.lastActivityTimestamp = activeTs
+        self.expireAt = expireAt ?? (activeTs + AppConstants.Timing.Inactivity.ttlDurationSeconds)
         self.members = members
         self.indicators = indicators
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, hostId, maxCapacity, createdAt, lastActivityTimestamp, members, indicators
+        case id, hostId, maxCapacity, createdAt, lastActivityTimestamp, expireAt, members, indicators
         case hasPin, pinHash
     }
 
@@ -47,6 +51,7 @@ public struct SquadRoom: Identifiable, Codable, Equatable {
         try container.encode(maxCapacity, forKey: .maxCapacity)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(lastActivityTimestamp, forKey: .lastActivityTimestamp)
+        try container.encode(expireAt, forKey: .expireAt)
         try container.encode(hasPin, forKey: .hasPin)
         try container.encodeIfPresent(pinHash, forKey: .pinHash)
         try container.encode(members, forKey: .members)
@@ -60,7 +65,10 @@ public struct SquadRoom: Identifiable, Codable, Equatable {
         maxCapacity = try container.decodeIfPresent(Int.self, forKey: .maxCapacity) ?? AppConstants.Subscription.freeTierMaxCapacity
         let decodedCreatedAt = try container.decodeIfPresent(TimeInterval.self, forKey: .createdAt) ?? Date().timeIntervalSince1970
         createdAt = decodedCreatedAt
-        lastActivityTimestamp = try container.decodeIfPresent(TimeInterval.self, forKey: .lastActivityTimestamp) ?? decodedCreatedAt
+        let decodedActivity = try container.decodeIfPresent(TimeInterval.self, forKey: .lastActivityTimestamp) ?? decodedCreatedAt
+        lastActivityTimestamp = decodedActivity
+        expireAt = try container.decodeIfPresent(TimeInterval.self, forKey: .expireAt)
+            ?? (decodedActivity + AppConstants.Timing.Inactivity.ttlDurationSeconds)
         hasPin = try container.decodeIfPresent(Bool.self, forKey: .hasPin) ?? false
         pinHash = try container.decodeIfPresent(String.self, forKey: .pinHash)
         members = try container.decodeIfPresent([String: SquadMember].self, forKey: .members) ?? [:]

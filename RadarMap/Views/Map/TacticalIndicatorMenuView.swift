@@ -68,7 +68,7 @@ public struct TacticalIndicatorMenuView: View {
                 }
             }) {
                 HStack {
-                    Text("Squad Orders")
+                    Text("Team Orders")
                         .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundColor(.white)
                     
@@ -95,7 +95,7 @@ public struct TacticalIndicatorMenuView: View {
                 }
             }) {
                 HStack {
-                    Text("Enemy Indicators")
+                    Text("Tac Indicators")
                         .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundColor(.white)
                     
@@ -126,7 +126,7 @@ public struct TacticalIndicatorMenuView: View {
     
     private func indicatorOptionsList(for category: TacticalIndicatorCategory) -> some View {
         let types: [TacticalIndicatorType] = category == .squadOrder
-            ? [.watchHere, .goHere, .attackHere]
+            ? [.watchHere, .goHere, .attackHere, .protectHere]
             : [.infantry, .lightVehicle, .heavyVehicle]
         
         return ScrollView {

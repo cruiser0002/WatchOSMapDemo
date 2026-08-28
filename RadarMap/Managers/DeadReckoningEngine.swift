@@ -12,14 +12,52 @@ public final class DeadReckoningEngine: ObservableObject {
         public var heading: Double
         public var startCoordinate: CLLocationCoordinate2D
         public var targetCoordinate: CLLocationCoordinate2D
+        public var coordinateStartTime: TimeInterval
+        public var coordinateDuration: TimeInterval
         public var startHeading: Double
         public var targetHeading: Double
-        public var startTime: TimeInterval
-        public var duration: TimeInterval
+        public var headingStartTime: TimeInterval
+        public var headingDuration: TimeInterval
         public var lastUpdate: TimeInterval
+        
+        public var startTime: TimeInterval {
+            get { coordinateStartTime }
+            set { coordinateStartTime = newValue }
+        }
+        public var duration: TimeInterval {
+            get { coordinateDuration }
+            set { coordinateDuration = newValue }
+        }
+        
+        public init(
+            coordinate: CLLocationCoordinate2D,
+            heading: Double,
+            startCoordinate: CLLocationCoordinate2D,
+            targetCoordinate: CLLocationCoordinate2D,
+            startHeading: Double,
+            targetHeading: Double,
+            startTime: TimeInterval,
+            duration: TimeInterval,
+            lastUpdate: TimeInterval,
+            headingStartTime: TimeInterval? = nil,
+            headingDuration: TimeInterval? = nil
+        ) {
+            self.coordinate = coordinate
+            self.heading = heading
+            self.startCoordinate = startCoordinate
+            self.targetCoordinate = targetCoordinate
+            self.coordinateStartTime = startTime
+            self.coordinateDuration = duration
+            self.startHeading = startHeading
+            self.targetHeading = targetHeading
+            self.headingStartTime = headingStartTime ?? startTime
+            self.headingDuration = headingDuration ?? duration
+            self.lastUpdate = lastUpdate
+        }
     }
     
     @Published public private(set) var smoothedMembers: [String: SmoothState] = [:]
+    @Published public private(set) var localPlayerState: SmoothState?
     
     private var displayTimer: AnyCancellable?
     
@@ -29,8 +67,8 @@ public final class DeadReckoningEngine: ObservableObject {
     
     public func startInterpolationLoop() {
         guard displayTimer == nil else { return }
-        // Run energy-efficient 5Hz tick for teammate dead-reckoning smoothing
-        displayTimer = Timer.publish(every: AppConstants.Timing.DisplayRefresh.teammateDeadReckoningIntervalSeconds, on: .main, in: .common)
+        // Run smooth 20Hz tick for dead-reckoning smoothing (local & remote)
+        displayTimer = Timer.publish(every: AppConstants.Timing.DisplayRefresh.radarUIIntervalSeconds, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 self?.updateInterpolation()
@@ -40,6 +78,78 @@ public final class DeadReckoningEngine: ObservableObject {
     public func stopInterpolationLoop() {
         displayTimer?.cancel()
         displayTimer = nil
+    }
+    
+    /// Updates the local player ("ME") coordinate and heading with smooth gliding interpolation
+    public func updateLocalPlayer(coordinate: CLLocationCoordinate2D, heading: Double) {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.updateLocalPlayer(coordinate: coordinate, heading: heading)
+            }
+            return
+        }
+        
+        let now = Date().timeIntervalSince1970
+        
+        if var current = localPlayerState {
+            let elapsedSinceLast = max(0.5, min(2.5, now - current.lastUpdate))
+            current.startCoordinate = current.coordinate
+            current.targetCoordinate = coordinate
+            current.coordinateStartTime = now
+            current.coordinateDuration = elapsedSinceLast
+            current.startHeading = current.heading
+            current.targetHeading = heading
+            current.headingStartTime = now
+            current.headingDuration = min(0.3, elapsedSinceLast)
+            current.lastUpdate = now
+            localPlayerState = current
+        } else {
+            localPlayerState = SmoothState(
+                coordinate: coordinate,
+                heading: heading,
+                startCoordinate: coordinate,
+                targetCoordinate: coordinate,
+                startHeading: heading,
+                targetHeading: heading,
+                startTime: now,
+                duration: 1.0,
+                lastUpdate: now
+            )
+        }
+        
+        startInterpolationLoop()
+    }
+    
+    /// Updates only the local player's heading for high-frequency compass responsiveness
+    public func updateLocalPlayerHeading(_ heading: Double) {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.updateLocalPlayerHeading(heading)
+            }
+            return
+        }
+        
+        let now = Date().timeIntervalSince1970
+        if var current = localPlayerState {
+            current.startHeading = current.heading
+            current.targetHeading = heading
+            // Quick 0.15s heading smoothing to eliminate compass jitter without disturbing coordinate gliding
+            current.headingStartTime = now
+            current.headingDuration = 0.15
+            current.lastUpdate = now
+            localPlayerState = current
+            startInterpolationLoop()
+        }
+    }
+    
+    /// Retrieves the smoothed coordinate for the local player
+    public func smoothedLocalCoordinate(fallback: CLLocationCoordinate2D) -> CLLocationCoordinate2D {
+        return localPlayerState?.coordinate ?? fallback
+    }
+    
+    /// Retrieves the smoothed heading for the local player
+    public func smoothedLocalHeading(fallback: Double) -> Double {
+        return localPlayerState?.heading ?? fallback
     }
     
     /// Called whenever a new telemetry packet is received for a remote player
@@ -57,10 +167,12 @@ public final class DeadReckoningEngine: ObservableObject {
             let elapsedSinceLast = max(0.5, min(3.0, now - current.lastUpdate))
             current.startCoordinate = current.coordinate
             current.targetCoordinate = newCoordinate
+            current.coordinateStartTime = now
+            current.coordinateDuration = elapsedSinceLast
             current.startHeading = current.heading
             current.targetHeading = newHeading
-            current.startTime = now
-            current.duration = elapsedSinceLast
+            current.headingStartTime = now
+            current.headingDuration = elapsedSinceLast
             current.lastUpdate = now
             smoothedMembers[id] = current
         } else {
@@ -89,7 +201,20 @@ public final class DeadReckoningEngine: ObservableObject {
             return
         }
         smoothedMembers.removeValue(forKey: id)
-        if smoothedMembers.isEmpty {
+        if smoothedMembers.isEmpty && localPlayerState == nil {
+            stopInterpolationLoop()
+        }
+    }
+    
+    public func clearRemoteMembers() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.clearRemoteMembers()
+            }
+            return
+        }
+        smoothedMembers.removeAll()
+        if smoothedMembers.isEmpty && localPlayerState == nil {
             stopInterpolationLoop()
         }
     }
@@ -102,38 +227,83 @@ public final class DeadReckoningEngine: ObservableObject {
             return
         }
         smoothedMembers.removeAll()
+        localPlayerState = nil
         stopInterpolationLoop()
     }
     
     private func updateInterpolation() {
-        guard !smoothedMembers.isEmpty else {
-            stopInterpolationLoop()
-            return
-        }
         let now = Date().timeIntervalSince1970
         var hasChanges = false
         var anyActive = false
         
-        for (id, state) in smoothedMembers {
-            let elapsed = now - state.startTime
-            let progress = min(1.0, max(0.0, elapsed / max(0.1, state.duration)))
+        // 1. Interpolate Local Player ("ME")
+        if let local = localPlayerState {
+            let coordElapsed = now - local.coordinateStartTime
+            let coordProgress = min(1.0, max(0.0, coordElapsed / max(0.05, local.coordinateDuration)))
             
-            if progress < 1.0 {
+            let hdgElapsed = now - local.headingStartTime
+            let hdgProgress = min(1.0, max(0.0, hdgElapsed / max(0.05, local.headingDuration)))
+            
+            var newCoord = local.coordinate
+            var newHdg = local.heading
+            
+            if coordProgress < 1.0 {
                 anyActive = true
+                // Linear constant velocity interpolation for smooth continuous movement without start/stop pulsation
+                let lat = local.startCoordinate.latitude + (local.targetCoordinate.latitude - local.startCoordinate.latitude) * coordProgress
+                let lon = local.startCoordinate.longitude + (local.targetCoordinate.longitude - local.startCoordinate.longitude) * coordProgress
+                newCoord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+            } else if local.coordinate != local.targetCoordinate {
+                newCoord = local.targetCoordinate
             }
             
-            // Hermite SmoothStep interpolation for coordinate gliding
-            let smoothProgress = progress * progress * (3.0 - 2.0 * progress)
+            if hdgProgress < 1.0 {
+                anyActive = true
+                // 2D Unit vector circular interpolation for smooth turning
+                newHdg = LocationHeadingManager.circularInterpolate(from: local.startHeading, to: local.targetHeading, weight: hdgProgress)
+            } else if local.heading != local.targetHeading {
+                newHdg = local.targetHeading
+            }
             
-            let lat = state.startCoordinate.latitude + (state.targetCoordinate.latitude - state.startCoordinate.latitude) * smoothProgress
-            let lon = state.startCoordinate.longitude + (state.targetCoordinate.longitude - state.startCoordinate.longitude) * smoothProgress
+            if abs(local.coordinate.latitude - newCoord.latitude) > 1e-8 || abs(local.coordinate.longitude - newCoord.longitude) > 1e-8 || abs(local.heading - newHdg) > 0.05 {
+                localPlayerState?.coordinate = newCoord
+                localPlayerState?.heading = newHdg
+                hasChanges = true
+            }
+        }
+        
+        // 2. Interpolate Remote Teammates
+        for (id, state) in smoothedMembers {
+            let coordElapsed = now - state.coordinateStartTime
+            let coordProgress = min(1.0, max(0.0, coordElapsed / max(0.05, state.coordinateDuration)))
             
-            // 2D Unit vector circular interpolation for smooth turning
-            let smoothHdg = LocationHeadingManager.circularInterpolate(from: state.startHeading, to: state.targetHeading, weight: smoothProgress)
+            let hdgElapsed = now - state.headingStartTime
+            let hdgProgress = min(1.0, max(0.0, hdgElapsed / max(0.05, state.headingDuration)))
             
-            if abs(state.coordinate.latitude - lat) > 1e-7 || abs(state.coordinate.longitude - lon) > 1e-7 || abs(state.heading - smoothHdg) > 0.1 {
-                smoothedMembers[id]?.coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
-                smoothedMembers[id]?.heading = smoothHdg
+            var newCoord = state.coordinate
+            var newHdg = state.heading
+            
+            if coordProgress < 1.0 {
+                anyActive = true
+                // Linear constant velocity interpolation for smooth continuous movement without start/stop pulsation
+                let lat = state.startCoordinate.latitude + (state.targetCoordinate.latitude - state.startCoordinate.latitude) * coordProgress
+                let lon = state.startCoordinate.longitude + (state.targetCoordinate.longitude - state.startCoordinate.longitude) * coordProgress
+                newCoord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+            } else if state.coordinate != state.targetCoordinate {
+                newCoord = state.targetCoordinate
+            }
+            
+            if hdgProgress < 1.0 {
+                anyActive = true
+                // 2D Unit vector circular interpolation for smooth turning
+                newHdg = LocationHeadingManager.circularInterpolate(from: state.startHeading, to: state.targetHeading, weight: hdgProgress)
+            } else if state.heading != state.targetHeading {
+                newHdg = state.targetHeading
+            }
+            
+            if abs(state.coordinate.latitude - newCoord.latitude) > 1e-7 || abs(state.coordinate.longitude - newCoord.longitude) > 1e-7 || abs(state.heading - newHdg) > 0.1 {
+                smoothedMembers[id]?.coordinate = newCoord
+                smoothedMembers[id]?.heading = newHdg
                 hasChanges = true
             }
         }
@@ -142,7 +312,7 @@ public final class DeadReckoningEngine: ObservableObject {
             objectWillChange.send()
         }
         
-        // Automatic Idle Sleep: If all players have reached their target endpoints, sleep timer until next packet
+        // Automatic Idle Sleep: If all players have reached their target endpoints, sleep timer until next packet / GPS fix
         if !anyActive {
             stopInterpolationLoop()
         }
@@ -159,9 +329,11 @@ public final class DeadReckoningEngine: ObservableObject {
     }
     
     /// Returns a copy of the given member updated with smoothed dead-reckoned coordinate and heading.
+    /// Uses a single dictionary lookup (instead of two) to minimise overhead inside the render loop.
     public func smoothedMember(for member: SquadMember) -> SquadMember {
-        let coord = coordinate(for: member)
-        let hdg = heading(for: member)
+        let state = smoothedMembers[member.id]
+        let coord = state?.coordinate ?? member.coordinate
+        let hdg   = state?.heading   ?? member.heading
         return SquadMember(
             id: member.id,
             callsign: member.callsign,

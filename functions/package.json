@@ -3,7 +3,7 @@
   "description": "Cloud Functions for RadarMap Firebase Realtime Database cleanup and optimization",
   "version": "1.0.0",
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "main": "index.js",
   "dependencies": {

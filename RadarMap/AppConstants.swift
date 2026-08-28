@@ -1,6 +1,5 @@
 import Foundation
 import CoreLocation
-import CoreBluetooth
 import SwiftUI
 
 /// Centralized configuration constants for the RadarMap application.
@@ -29,14 +28,6 @@ public enum AppConstants {
             public static let tactical = "tactical"
             public static let lastActivityTimestamp = "lastActivityTimestamp"
             public static let members = "members"
-        }
-        
-        /// Bluetooth Low Energy (BLE) Radar Constants
-        public enum Bluetooth {
-            public static let radarServiceUUID = CBUUID(string: "A495FA01-C5B1-4B44-B512-1370F02D74DE")
-            public static let roomDataCharacteristicUUID = CBUUID(string: "A495FA02-C5B1-4B44-B512-1370F02D74DE")
-            public static let advertisementPrefix = "RM:"
-            public static let defaultLocalName = "Radar-Room"
         }
         
         /// Quality monitoring and latency grading thresholds
@@ -181,12 +172,10 @@ public enum AppConstants {
             public static let intervalChangeEpsilon: Double = 0.01
         }
         
-        /// Refresh rates for display animations and dead-reckoning smoothing
+        /// Refresh rates for display animations and unified dead-reckoning smoothing (local & remote)
         public enum DisplayRefresh {
             public static let radarUIHz: Double = 20.0
             public static let radarUIIntervalSeconds: TimeInterval = 1.0 / 20.0
-            public static let teammateDeadReckoningHz: Double = 5.0
-            public static let teammateDeadReckoningIntervalSeconds: TimeInterval = 1.0 / 5.0
         }
         
         /// Movement and telemetry delta gating thresholds (Dead Reckoning optimization)
@@ -210,10 +199,11 @@ public enum AppConstants {
             public static let defaultUpdateInterval: TimeInterval = 1.0
         }
         
-        /// Inactivity room cleanup threshold
+        /// Inactivity room cleanup threshold & TTL duration
         public enum Inactivity {
             public static let idleCutoffDays: Double = 7.0
             public static let secondsPerDay: Double = 86400.0
+            public static let ttlDurationSeconds: TimeInterval = idleCutoffDays * secondsPerDay
         }
         
         /// Hold-to-Die gesture timing parameters
@@ -265,6 +255,64 @@ public enum AppConstants {
             public static let maxWatchScaleMeters: Double = 5000.0
             public static let maxiOSScaleMeters: Double = 20000.0
             public static let crownStepMeters: Double = 10.0
+            
+            /// Discrete whole-number division scale ladder (multiples of 5, 10, 25, 50, 75, 100, 200, 250, 500, 1000 per division)
+            public static let discreteScales: [Double] = [
+                20.0,
+                40.0,
+                100.0,
+                200.0,
+                300.0,
+                400.0,
+                500.0,
+                800.0,
+                1000.0,
+                1500.0,
+                2000.0,
+                2500.0,
+                3000.0,
+                4000.0,
+                5000.0
+            ]
+            
+            /// Finds the closest discrete scale index for a given scale in meters
+            public static func nearestScaleIndex(for scaleMeters: Double) -> Int {
+                var closestIndex = 0
+                var minDiff = Double.greatestFiniteMagnitude
+                for (index, scale) in discreteScales.enumerated() {
+                    let diff = abs(scale - scaleMeters)
+                    if diff < minDiff {
+                        minDiff = diff
+                        closestIndex = index
+                    }
+                }
+                return closestIndex
+            }
+            
+            /// Snaps an arbitrary scale to the nearest discrete whole-number division scale
+            public static func snapToDiscreteScale(_ scaleMeters: Double) -> Double {
+                let index = nearestScaleIndex(for: scaleMeters)
+                return discreteScales[index]
+            }
+            
+            /// Finds the crown index (reversed direction: 0 = max zoomed out 5000m, max index = max zoomed in 20m)
+            public static func crownIndex(for scaleMeters: Double) -> Double {
+                let nearestIdx = nearestScaleIndex(for: scaleMeters)
+                return Double((discreteScales.count - 1) - nearestIdx)
+            }
+            
+            /// Resolves the scale in meters for a given crown index (reversed direction: scrolling up zooms in)
+            public static func scale(forCrownIndex crownIndex: Double) -> Double {
+                let maxIdx = discreteScales.count - 1
+                let intIndex = min(max(Int(round(crownIndex)), 0), maxIdx)
+                let scaleIndex = maxIdx - intIndex
+                return discreteScales[scaleIndex]
+            }
+            
+            /// Logarithmic crown parameters for proportional (Apple Maps-style) zoom
+            public static let minLogScale: Double = log(minScaleMeters)
+            public static let maxLogScaleWatch: Double = log(maxWatchScaleMeters)
+            public static let logCrownStep: Double = 0.22 // ~25% proportional rough zoom per detent (matching standard Apple Maps)
             
             /// Display geometry ratios
             public static let radarRadiusRatio: Double = 0.44
@@ -391,4 +439,31 @@ public enum AppConstants {
             }
         }
     }
+    
+    // MARK: - Watch Connectivity Sync
+    public enum WatchConnectivity {
+        public static let messageTypeKey = "wc_msg_type"
+        public static let memberIdKey = "wc_member_id"
+        public static let callsignKey = "wc_callsign"
+        public static let roomNameKey = "wc_room_name"
+        public static let pinKey = "wc_pin"
+        public static let themeKey = "wc_theme"
+        public static let actionTypeKey = "wc_action_type"
+        public static let isHostingKey = "wc_is_hosting"
+        public static let timestampKey = "wc_timestamp"
+        
+        public enum MessageType {
+            public static let configSync = "config_sync"
+            public static let roomAction = "room_action"
+            public static let identityHandshake = "identity_handshake"
+        }
+        
+        public enum ActionType {
+            public static let host = "host"
+            public static let join = "join"
+            public static let leave = "leave"
+            public static let disband = "disband"
+        }
+    }
 }
+

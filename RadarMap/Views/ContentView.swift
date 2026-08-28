@@ -16,7 +16,7 @@ public struct ContentView: View {
             .onAppear {
                 updateWristActivity(phase: scenePhase)
             }
-            .onChange(of: scenePhase) { newPhase in
+            .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
                     gameState.handleAppResume()
                 } else if newPhase == .background {
@@ -26,7 +26,7 @@ public struct ContentView: View {
                 }
             }
             #if os(watchOS)
-            .onChange(of: isLuminanceReduced) { reduced in
+            .onChange(of: isLuminanceReduced) { _, reduced in
                 if !reduced && scenePhase != .background {
                     gameState.handleAppResume()
                 } else {

@@ -7,10 +7,26 @@ import WatchKit
 
 public struct TacticalRadarMapView: View {
     @EnvironmentObject var gameState: GameStateManager
-    @State private var position: MapCameraPosition = .userLocation(followsHeading: false, fallback: .automatic)
+    #if os(watchOS)
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+    #endif
+    @State private var position: MapCameraPosition = .region(
+        MKCoordinateRegion(
+            center: AppConstants.Location.fallbackCoordinate,
+            span: MKCoordinateSpan(
+                latitudeDelta: AppConstants.UI.RadarScale.mapSpanDelta(forRadarScaleMeters: AppConstants.UI.RadarScale.defaultScaleMeters),
+                longitudeDelta: AppConstants.UI.RadarScale.mapSpanDelta(forRadarScaleMeters: AppConstants.UI.RadarScale.defaultScaleMeters)
+            )
+        )
+    )
     @State private var showingSettingsSheet: Bool = false
     @State private var hasInitializedCamera: Bool = false
-    @State private var isProgrammaticCameraChange: Bool = false
+    @State private var isInteractiveMapCameraChanging: Bool = false
+    @State private var crownIndex: Double = AppConstants.UI.RadarScale.crownIndex(for: AppConstants.UI.RadarScale.defaultScaleMeters)
+    @State private var lastCameraCenterCoordinate: CLLocationCoordinate2D? = nil
+    #if os(watchOS)
+    @FocusState private var isFocused: Bool
+    #endif
     
     // Hold gesture state for KIA / Revive
     @State private var isHoldingActionButton: Bool = false
@@ -19,11 +35,17 @@ public struct TacticalRadarMapView: View {
     @State private var holdStartTime: Date? = nil
     @State private var actionCompletedForCurrentTouch: Bool = false
     
+    // EKG scan speed — cached so the body division doesn't rerun at 20 Hz when BPM is unchanged.
+    @State private var sweepDuration: Double = AppConstants.Health.referenceBpm / AppConstants.Health.defaultRestingHeartRate
+    
     public init() {}
     
+    private var meMember: SquadMember {
+        gameState.localPlayerMember
+    }
+    
     private var otherSquadMembers: [SquadMember] {
-        guard let room = gameState.firebaseManager.activeRoom else { return [] }
-        return room.members.values.filter { $0.id != gameState.myMemberId }
+        gameState.otherSquadMembers
     }
     
     private var radarThemeColor: Color {
@@ -40,87 +62,104 @@ public struct TacticalRadarMapView: View {
     
     public var body: some View {
         ZStack {
-            // Tactical Standard MapKit Layer (Kept mounted to preserve camera cache, zoom & center)
-            let meMember = gameState.localPlayerMember
-            MapReader { proxy in
-                Map(position: $position) {
-                    // Remote Teammate Annotations (Smooth 60 FPS Gliding & Rotation)
-                    ForEach(otherSquadMembers, id: \.id) { member in
-                        let smoothed = gameState.deadReckoningEngine.smoothedMember(for: member)
+            // Tactical Standard MapKit Layer
+            // Conditionally mounted — unmounting in radar mode stops MapKit tile decoding,
+            // annotation walking, and camera callbacks entirely (not just hidden at opacity 0).
+            // The @State `position` is preserved in this view and re-applied on re-mount.
+            if gameState.selectedMapStyle != .radar {
+                MapReader { proxy in
+                    Map(
+                        position: $position,
+                        interactionModes: {
+                            #if os(watchOS)
+                            return MapInteractionModes.pan
+                            #else
+                            return [.pan, .zoom]
+                            #endif
+                        }()
+                    ) {
+                        // Remote Teammate Annotations (Smooth 60 FPS Gliding & Rotation)
+                        ForEach(otherSquadMembers, id: \.id) { member in
+                            let smoothed = gameState.deadReckoningEngine.smoothedMember(for: member)
+                            Annotation(
+                                "",
+                                coordinate: smoothed.coordinate,
+                                anchor: .center
+                            ) {
+                                MemberAnnotationView(
+                                    member: smoothed,
+                                    isMe: false,
+                                    radarColor: radarThemeColor
+                                )
+                            }
+                        }
+                        
+                        // Tactical Indicators
+                        ForEach(gameState.allTacticalIndicators) { indicator in
+                            Annotation(
+                                "",
+                                coordinate: indicator.coordinate,
+                                anchor: .center
+                            ) {
+                                TacticalIndicatorOverlayView(
+                                    indicator: indicator,
+                                    radarColor: radarThemeColor,
+                                    onDelete: {
+                                        gameState.removeTacticalIndicator(id: indicator.id)
+                                    }
+                                )
+                            }
+                        }
+                        
+                        // Local Player "Me" (Anchors smoothly to localPlayerMember coordinate)
                         Annotation(
                             "",
-                            coordinate: smoothed.coordinate,
+                            coordinate: meMember.coordinate,
                             anchor: .center
                         ) {
                             MemberAnnotationView(
-                                member: smoothed,
-                                isMe: false,
+                                member: meMember,
+                                isMe: true,
                                 radarColor: radarThemeColor
                             )
                         }
                     }
-                    
-                    // Tactical Indicators
-                    ForEach(gameState.allTacticalIndicators) { indicator in
-                        Annotation(
-                            "",
-                            coordinate: indicator.coordinate,
-                            anchor: .center
-                        ) {
-                            TacticalIndicatorOverlayView(
-                                indicator: indicator,
-                                radarColor: radarThemeColor,
-                                onDelete: {
-                                    gameState.removeTacticalIndicator(id: indicator.id)
-                                }
-                            )
+                    .mapStyle(gameState.selectedMapStyle.mapKitStyle)
+                    .mapControls { }
+                    .onMapCameraChange(frequency: .onEnd) { context in
+                        #if !os(watchOS)
+                        let newDelta = context.region.span.latitudeDelta
+                        let calculatedScale = AppConstants.UI.RadarScale.radarScaleMeters(forMapSpanDelta: newDelta)
+                        if abs(gameState.radarScaleMeters - calculatedScale) > 0.5 {
+                            gameState.radarScaleMeters = calculatedScale
+                            crownIndex = AppConstants.UI.RadarScale.crownIndex(for: calculatedScale)
+                        }
+                        #endif
+                        
+                        let center = context.region.center
+                        let dLat = (center.latitude - meMember.coordinate.latitude) * AppConstants.Location.metersPerDegreeLatitude
+                        let dLon = (center.longitude - meMember.coordinate.longitude) * AppConstants.Location.metersPerDegreeLatitude * cos(center.latitude * AppConstants.Location.degreesToRadiansFactor)
+                        let dist = hypot(dLat, dLon)
+                        let minPanThreshold = max(15.0, gameState.radarScaleMeters * 0.25)
+                        if dist > minPanThreshold {
+                            gameState.currentMapCenter = center
+                            lastCameraCenterCoordinate = center
                         }
                     }
-                    
-                    // User Location "Me" (Explicit center anchor to prevent swaying / bobbing)
-                    Annotation(
-                        "",
-                        coordinate: meMember.coordinate,
-                        anchor: .center
-                    ) {
-                        MemberAnnotationView(
-                            member: meMember,
-                            isMe: true,
-                            radarColor: radarThemeColor
-                        )
+                    .onTapGesture { screenPoint in
+                        if gameState.pendingIndicatorPlacementType != nil,
+                           let coordinate = proxy.convert(screenPoint, from: .local) {
+                            gameState.placeTacticalIndicator(at: coordinate)
+                        }
+                        #if os(watchOS)
+                        requestCrownFocus()
+                        #endif
                     }
-                }
-                .mapStyle(gameState.selectedMapStyle.mapKitStyle)
-                .mapControls {
-                    MapCompass()
-                }
-                .onMapCameraChange(frequency: .onEnd) { context in
-                    guard gameState.selectedMapStyle != .radar else { return }
-                    guard !isProgrammaticCameraChange else {
-                        isProgrammaticCameraChange = false
-                        return
-                    }
-                    gameState.currentMapSpanDelta = context.region.span.latitudeDelta
-                    
-                    let centerLoc = CLLocation(latitude: context.region.center.latitude, longitude: context.region.center.longitude)
-                    let userLoc = gameState.locationHeadingManager.userLocation ?? CLLocation(latitude: AppConstants.Location.fallbackLatitude, longitude: AppConstants.Location.fallbackLongitude)
-                    if centerLoc.distance(from: userLoc) > 8.0 {
-                        gameState.currentMapCenter = context.region.center
-                    } else {
-                        gameState.currentMapCenter = nil
-                    }
-                }
-                .onTapGesture { screenPoint in
-                    if gameState.pendingIndicatorPlacementType != nil,
-                       let coordinate = proxy.convert(screenPoint, from: .local) {
-                        gameState.placeTacticalIndicator(at: coordinate)
-                    }
+                    .edgesIgnoringSafeArea(.all)
                 }
                 .edgesIgnoringSafeArea(.all)
+                .zIndex(0)
             }
-            .opacity(gameState.selectedMapStyle != .radar ? 1.0 : 0.0)
-            .allowsHitTesting(gameState.selectedMapStyle != .radar)
-            .zIndex(0)
             
             // OLED Power-Saving Radar View
             if gameState.selectedMapStyle == .radar {
@@ -144,8 +183,15 @@ public struct TacticalRadarMapView: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .focusable(false)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
+                    .highPriorityGesture(
+                        TapGesture()
+                            .onEnded {
+                                showingSettingsSheet = true
+                            }
+                    )
                     
                     Spacer()
                     
@@ -175,8 +221,15 @@ public struct TacticalRadarMapView: View {
                             .frame(width: 48, height: 24)
                         }
                         .buttonStyle(.plain)
+                        .focusable(false)
                         .frame(minWidth: 48, minHeight: 44)
                         .contentShape(Rectangle())
+                        .highPriorityGesture(
+                            TapGesture()
+                                .onEnded {
+                                    gameState.openIndicatorMenu()
+                                }
+                        )
                     } else {
                         // Empty placeholder keeping layout alignment
                         Color.clear
@@ -192,56 +245,15 @@ public struct TacticalRadarMapView: View {
                 .padding(.horizontal, AppConstants.UI.HUD.horizontalPadding)
                 .padding(.top, AppConstants.UI.HUD.topPadding)
                 
-                // Active Placement Mode Banner
-                if let pending = gameState.pendingIndicatorPlacementType {
-                    HStack(spacing: 6) {
-                        TacticalIndicatorIcon(type: pending, size: 11)
-                            .foregroundColor(uiThemeColor)
-                        Text("TAP TO PLACE")
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
-                            .foregroundColor(uiThemeColor)
-                        Button(action: {
-                            gameState.cancelIndicatorPlacement()
-                        }) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundColor(uiThemeColor.opacity(0.8))
-                                .frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(.plain)
-                        .frame(minWidth: 32, minHeight: 32)
-                        .contentShape(Rectangle())
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.black.opacity(0.9))
-                    .cornerRadius(4)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(uiThemeColor.opacity(0.8), lineWidth: 1)
-                    )
-                    .transition(.opacity)
-                }
-                
                 Spacer()
                 
                 // Bottom HUD: Center/Zoom (bottom left), Ruler or KIA (bottom center), Map Style Switch (bottom right)
                 HStack(alignment: .center) {
                     // Bottom left: Map centering & default zoom (all views)
                     Button(action: {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            gameState.resetMapToDefaultCenterAndZoom()
-                            let latDelta = gameState.currentMapSpanDelta
-                            let center = gameState.locationHeadingManager.userLocation?.coordinate ?? AppConstants.Location.fallbackCoordinate
-                            position = .region(
-                                MKCoordinateRegion(
-                                    center: center,
-                                    span: MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: latDelta)
-                                )
-                            )
-                        }
+                        centerMapToUser()
                     }) {
-                        Image(systemName: "location.fill")
+                        Image(systemName: gameState.currentMapCenter == nil ? "location.fill" : "location")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(uiThemeColor)
                             .frame(width: 26, height: 26)
@@ -249,8 +261,15 @@ public struct TacticalRadarMapView: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .focusable(false)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
+                    .highPriorityGesture(
+                        TapGesture()
+                            .onEnded {
+                                centerMapToUser()
+                            }
+                    )
                     
                     Spacer()
                     
@@ -260,11 +279,13 @@ public struct TacticalRadarMapView: View {
                             let themeColor = uiThemeColor
                             let buttonWidth: CGFloat = 48
                             let buttonHeight: CGFloat = 24
-                            let currentBpm = gameState.healthKitManager.currentHeartRate > 0 ? gameState.healthKitManager.currentHeartRate : AppConstants.Health.defaultRestingHeartRate
-                            // Scanning line sweep period using BPM/referenceBpm equation (e.g. 100 BPM = 1.0s, 75 BPM = 1.33s)
-                            let sweepDuration = currentBpm > 0 ? (AppConstants.Health.referenceBpm / currentBpm) : 1.0
+                            #if os(watchOS)
+                            let scanInterval = isLuminanceReduced ? 1.0 : AppConstants.Timing.DisplayRefresh.radarUIIntervalSeconds
+                            #else
+                            let scanInterval = AppConstants.Timing.DisplayRefresh.radarUIIntervalSeconds
+                            #endif
                             
-                            TimelineView(.periodic(from: .now, by: AppConstants.Timing.DisplayRefresh.radarUIIntervalSeconds)) { timeline in
+                            TimelineView(.periodic(from: .now, by: scanInterval)) { timeline in
                                 let elapsed = timeline.date.timeIntervalSinceReferenceDate
                                 let progress = (elapsed.truncatingRemainder(dividingBy: sweepDuration)) / sweepDuration
                                 let ekgSize = CGSize(width: 32, height: 14)
@@ -295,10 +316,9 @@ public struct TacticalRadarMapView: View {
                                         
                                         // Subtle glow halo
                                         Circle()
-                                            .fill(themeColor.opacity(0.85))
+                                            .fill(themeColor.opacity(0.35))
                                             .frame(width: 5.5, height: 5.5)
                                             .position(dotPos)
-                                            .blur(radius: 0.8)
                                         
                                         // Bright center core dot
                                         Circle()
@@ -385,8 +405,15 @@ public struct TacticalRadarMapView: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .focusable(false)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
+                    .highPriorityGesture(
+                        TapGesture()
+                            .onEnded {
+                                toggleNextMapStyle()
+                            }
+                    )
                 }
                 .padding(.horizontal, AppConstants.UI.HUD.horizontalPadding)
                 .padding(.bottom, AppConstants.UI.HUD.bottomPadding)
@@ -394,7 +421,20 @@ public struct TacticalRadarMapView: View {
             .edgesIgnoringSafeArea(.all)
             .zIndex(10)
         }
-        .animation(.easeInOut(duration: 0.25), value: gameState.selectedMapStyle)
+        #if os(watchOS)
+        .focusable()
+        .focused($isFocused)
+        .defaultFocus($isFocused, true)
+        .digitalCrownRotation(
+            $crownIndex,
+            from: 0.0,
+            through: Double(AppConstants.UI.RadarScale.discreteScales.count - 1),
+            by: 1.0,
+            sensitivity: .medium,
+            isContinuous: false,
+            isHapticFeedbackEnabled: true
+        )
+        #endif
         .navigationTitle("Radar")
         #if os(watchOS) || os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -416,38 +456,133 @@ public struct TacticalRadarMapView: View {
             }
         }
         #if os(watchOS)
-        .focusable()
-        .digitalCrownRotation(
-            $gameState.radarScaleMeters,
-            from: AppConstants.UI.RadarScale.minScaleMeters,
-            through: AppConstants.UI.RadarScale.maxWatchScaleMeters,
-            by: AppConstants.UI.RadarScale.crownStepMeters,
-            sensitivity: .medium,
-            isContinuous: false,
-            isHapticFeedbackEnabled: true
-        )
+        .onChange(of: isFocused) { _, newValue in
+            if !newValue && !showingSettingsSheet && !gameState.showIndicatorMenuSheet && !gameState.showPaywallSheet {
+                requestCrownFocus()
+            }
+        }
+        .onChange(of: gameState.selectedMapStyle) { _, _ in
+            requestCrownFocus()
+        }
+        .onChange(of: showingSettingsSheet) { _, isShowing in
+            if !isShowing {
+                requestCrownFocus()
+            }
+        }
+        .onChange(of: gameState.showIndicatorMenuSheet) { _, isShowing in
+            if !isShowing {
+                requestCrownFocus()
+            }
+        }
+        .onChange(of: gameState.showPaywallSheet) { _, isShowing in
+            if !isShowing {
+                requestCrownFocus()
+            }
+        }
         #endif
-        .onChange(of: gameState.radarScaleMeters) { _, _ in
-            if gameState.selectedMapStyle != .radar {
-                isProgrammaticCameraChange = true
-                let latDelta = gameState.currentMapSpanDelta
-                let center = gameState.currentMapCenter ?? gameState.locationHeadingManager.userLocation?.coordinate ?? AppConstants.Location.fallbackCoordinate
+        .onChange(of: crownIndex) { _, newIndex in
+            let newScale = AppConstants.UI.RadarScale.scale(forCrownIndex: newIndex)
+            if abs(gameState.radarScaleMeters - newScale) > 0.5 {
+                gameState.radarScaleMeters = newScale
+                if gameState.selectedMapStyle != .radar {
+                    let latDelta = gameState.currentMapSpanDelta
+                    let targetCenter = gameState.currentMapCenter ?? meMember.coordinate
+                    lastCameraCenterCoordinate = targetCenter
+                    position = .region(
+                        MKCoordinateRegion(
+                            center: targetCenter,
+                            span: MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: latDelta)
+                        )
+                    )
+                }
+            }
+        }
+        .onChange(of: gameState.radarCenterTrigger) { _, _ in
+            let latDelta = gameState.currentMapSpanDelta
+            crownIndex = AppConstants.UI.RadarScale.crownIndex(for: gameState.radarScaleMeters)
+            lastCameraCenterCoordinate = meMember.coordinate
+            withAnimation(.easeInOut(duration: 0.25)) {
                 position = .region(
                     MKCoordinateRegion(
-                        center: center,
+                        center: meMember.coordinate,
                         span: MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: latDelta)
                     )
                 )
             }
         }
+        .onChange(of: gameState.currentMapCenter) { _, newCenter in
+            if newCenter == nil {
+                let latDelta = gameState.currentMapSpanDelta
+                lastCameraCenterCoordinate = meMember.coordinate
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    position = .region(
+                        MKCoordinateRegion(
+                            center: meMember.coordinate,
+                            span: MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: latDelta)
+                        )
+                    )
+                }
+            } else {
+                lastCameraCenterCoordinate = newCenter
+            }
+        }
+        .onChange(of: meMember.coordinate.latitude) { _, _ in
+            handlePlayerCoordinateChange()
+        }
+        .onChange(of: meMember.coordinate.longitude) { _, _ in
+            handlePlayerCoordinateChange()
+        }
         .onAppear {
+            crownIndex = AppConstants.UI.RadarScale.crownIndex(for: gameState.radarScaleMeters)
+            let latDelta = gameState.currentMapSpanDelta
+            let targetCenter = gameState.currentMapCenter ?? meMember.coordinate
+            lastCameraCenterCoordinate = targetCenter
+            position = .region(
+                MKCoordinateRegion(
+                    center: targetCenter,
+                    span: MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: latDelta)
+                )
+            )
+            #if os(watchOS)
+            requestCrownFocus()
+            #endif
             gameState.locationHeadingManager.requestPermissions()
             gameState.locationHeadingManager.startUpdates()
+            // Seed sweepDuration from the current heart rate on appear.
+            let bpm = gameState.healthKitManager.currentHeartRate > 0 ? gameState.healthKitManager.currentHeartRate : AppConstants.Health.defaultRestingHeartRate
+            sweepDuration = AppConstants.Health.referenceBpm / bpm
+        }
+        .onChange(of: gameState.healthKitManager.currentHeartRate) { _, newRate in
+            // Recompute EKG sweep period when BPM changes — not on every 20 Hz render tick.
+            let bpm = newRate > 0 ? newRate : AppConstants.Health.defaultRestingHeartRate
+            sweepDuration = AppConstants.Health.referenceBpm / bpm
         }
         .onDisappear {
             cancelActionHold()
         }
     }
+    
+    private func handlePlayerCoordinateChange() {
+        guard gameState.currentMapCenter == nil && gameState.selectedMapStyle != .radar else { return }
+        let currentCoord = meMember.coordinate
+        lastCameraCenterCoordinate = currentCoord
+        let latDelta = gameState.currentMapSpanDelta
+        position = .region(
+            MKCoordinateRegion(
+                center: currentCoord,
+                span: MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: latDelta)
+            )
+        )
+    }
+    
+    #if os(watchOS)
+    private func requestCrownFocus() {
+        isFocused = true
+        DispatchQueue.main.async {
+            isFocused = true
+        }
+    }
+    #endif
     
     // MARK: - Hold-to-Act (KIA / Revive) Gesture Handling
     
@@ -485,6 +620,9 @@ public struct TacticalRadarMapView: View {
             isHoldingActionButton = false
             actionProgress = 0.0
         }
+        #if os(watchOS)
+        requestCrownFocus()
+        #endif
     }
     
     private func triggerAction() {
@@ -498,6 +636,16 @@ public struct TacticalRadarMapView: View {
         withAnimation(.easeInOut(duration: AppConstants.UI.Gestures.actionAnimationDurationSeconds)) {
             gameState.setDead(!gameState.isDead)
         }
+        #if os(watchOS)
+        requestCrownFocus()
+        #endif
+    }
+    
+    private func centerMapToUser() {
+        gameState.resetMapToDefaultCenterAndZoom()
+        #if os(watchOS)
+        requestCrownFocus()
+        #endif
     }
     
     private func toggleNextMapStyle() {
@@ -505,19 +653,22 @@ public struct TacticalRadarMapView: View {
         case .standard:
             gameState.selectedMapStyle = .radar
         case .radar:
-            isProgrammaticCameraChange = true
+            gameState.selectedMapStyle = .standard
             let latDelta = gameState.currentMapSpanDelta
-            let center = gameState.currentMapCenter ?? gameState.locationHeadingManager.userLocation?.coordinate ?? AppConstants.Location.fallbackCoordinate
+            let targetCenter = gameState.currentMapCenter ?? gameState.localPlayerMember.coordinate
             position = .region(
                 MKCoordinateRegion(
-                    center: center,
+                    center: targetCenter,
                     span: MKCoordinateSpan(
                         latitudeDelta: latDelta,
                         longitudeDelta: latDelta
                     )
                 )
             )
-            gameState.selectedMapStyle = .standard
         }
+        #if os(watchOS)
+        crownIndex = AppConstants.UI.RadarScale.crownIndex(for: gameState.radarScaleMeters)
+        requestCrownFocus()
+        #endif
     }
 }
