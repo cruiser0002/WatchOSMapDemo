@@ -66,9 +66,9 @@ exports.cleanExpiredRooms = onSchedule(
 );
 
 /**
- * 1) Empty Room Cleanup Trigger:
+ * 1) Empty or Host Departure Room Cleanup Trigger:
  * Triggered on any write/delete to /rooms/{roomId}/members.
- * If members node becomes empty or null, automatically deletes the room and its associated telemetry.
+ * If the host leaves or members node becomes empty, automatically deletes the room, tactical, and associated telemetry.
  */
 exports.cleanupEmptyRoom = functions.database
   .ref("/rooms/{roomId}/members")
@@ -81,22 +81,43 @@ exports.cleanupEmptyRoom = functions.database
     const roomId = context.params.roomId;
     const membersData = change.after.val();
 
-    // If members node is null or an empty object, purge the room and its telemetry
+    // If members node is null or empty, purge room
     if (!membersData || Object.keys(membersData).length === 0) {
-      functions.logger.info(`Room ${roomId} has 0 members. Purging room and telemetry...`);
+      functions.logger.info(`Room ${roomId} has 0 members. Purging room, tactical, and telemetry...`);
       const updates = {};
       updates[`/rooms/${roomId}`] = null;
+      updates[`/tactical/${roomId}`] = null;
       updates[`/telemetry/${roomId}`] = null;
       await db.ref().update(updates);
-      functions.logger.info(`Successfully deleted empty room ${roomId} and associated telemetry.`);
+      functions.logger.info(`Successfully deleted empty room ${roomId}, tactical, and associated telemetry.`);
+      return null;
     }
+
+    // Check if the host has left the room
+    try {
+      const hostSnap = await db.ref(`/rooms/${roomId}/hostId`).once("value");
+      const hostId = hostSnap.val();
+      if (hostId && !membersData[hostId]) {
+        functions.logger.info(`Host ${hostId} has left room ${roomId}. Purging room, tactical, and telemetry...`);
+        const updates = {};
+        updates[`/rooms/${roomId}`] = null;
+        updates[`/tactical/${roomId}`] = null;
+        updates[`/telemetry/${roomId}`] = null;
+        await db.ref().update(updates);
+        functions.logger.info(`Successfully purged disbanded room ${roomId} after host departure.`);
+      }
+    } catch (err) {
+      functions.logger.error(`Error checking host presence for room ${roomId}:`, err);
+    }
+
+    return null;
   });
 
 /**
  * 2) 7-Day Idle Room Cleanup Schedule:
  * Runs daily at 00:00 UTC.
  * Scans /rooms and deletes any room where lastActivityTimestamp (or createdAt) is older than 7 days (604,800,000 ms).
- * Also cleans up any orphaned telemetry nodes.
+ * Also cleans up any orphaned telemetry and tactical nodes.
  */
 exports.scheduledDailyCleanup = functions.pubsub
   .schedule("every 24 hours")
@@ -136,6 +157,7 @@ exports.scheduledDailyCleanup = functions.pubsub
       if (isIdleSevenDays || isEmpty) {
         functions.logger.info(`Marking room ${roomId} for deletion (idle: ${isIdleSevenDays}, empty: ${isEmpty}, lastActive: ${new Date(lastActive).toISOString()})`);
         updates[`/rooms/${roomId}`] = null;
+        updates[`/tactical/${roomId}`] = null;
         updates[`/telemetry/${roomId}`] = null;
         deletedCount += 1;
       }

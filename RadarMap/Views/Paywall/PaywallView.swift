@@ -41,7 +41,7 @@ public struct PaywallView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     FeatureRow(icon: "person.3.fill", text: ">4 players")
                     FeatureRow(icon: "star.fill", text: "Orders")
-                    FeatureRow(icon: "exclamationmark.triangle.fill", text: "Enemy indicators")
+                    FeatureRow(icon: "exclamationmark.triangle.fill", text: "Tactical & environmental indicators")
                     FeatureRow(icon: "person.badge.shield.checkmark.fill", text: "Others join 100% free")
                 }
                 .padding(.horizontal, 4)

@@ -25,51 +25,76 @@ public struct MemberAnnotationView: View {
     }
     
     public var body: some View {
+        let markers = AppConstants.UI.MapMarkers.self
         // Tactical Vector Marker (center is the exact coordinate and breathing circle center)
         ZStack {
             if isKIA {
-                // KIA / Downed Marker ("X" shape) - Pre-rendered GPU Sprite
-                TacticalSpriteCache.shared.deadXSprite(color: indicatorColor, size: 18)
+                // KIA / Downed Marker ("X" shape)
+                SquadDeadXShape()
+                    .fill(indicatorColor)
+                    .overlay(
+                        SquadDeadXShape()
+                            .stroke(Color.black.opacity(0.8), lineWidth: 1.2)
+                    )
+                    .shadow(color: .black.opacity(0.7), radius: 2)
+                    .frame(width: markers.deadXIconSize, height: markers.deadXIconSize)
             } else {
                 // Live Squad Indicator (SL vs Teammate Player)
                 if member.isHost {
-                    // Squad Leader (SL) Icon (Pre-rendered Body + Hardware Heading Rotation)
+                    // Squad Leader (SL) Icon
                     ZStack {
-                        TacticalSpriteCache.shared.leaderSprite(color: indicatorColor, size: 22)
+                        SquadLeaderShape()
+                            .fill(indicatorColor)
+                            .overlay(
+                                SquadLeaderShape()
+                                    .stroke(Color.black.opacity(0.8), lineWidth: 1.2)
+                            )
+                            .shadow(color: .black.opacity(0.7), radius: 2)
+                            .frame(width: markers.leaderIconSize, height: markers.leaderIconSize)
                             .rotationEffect(.degrees(member.heading))
                         
-                        // Central heart-rate pulse core (theme color for high visibility)
+                        // Central heart-rate pulse core
                         SquadPulseCore(heartRate: member.heartRate, tintColor: indicatorColor)
-                            .frame(width: 6, height: 6)
+                            .frame(width: markers.pulseCoreSize, height: markers.pulseCoreSize)
                     }
-                    .frame(width: 26, height: 26)
+                    .frame(width: markers.markerFrameSize, height: markers.markerFrameSize)
                 } else {
-                    // Regular Squad Player Icon (Pre-rendered Body + Hardware Heading Rotation)
+                    // Regular Squad Player Icon
                     ZStack {
-                        TacticalSpriteCache.shared.playerSprite(color: indicatorColor, size: 18)
+                        SquadPlayerShape()
+                            .fill(indicatorColor)
+                            .overlay(
+                                SquadPlayerShape()
+                                    .stroke(Color.black.opacity(0.8), lineWidth: 1.2)
+                            )
+                            .shadow(color: .black.opacity(0.7), radius: 2)
+                            .frame(width: markers.playerIconSize, height: markers.playerIconSize)
                             .rotationEffect(.degrees(member.heading))
                         
-                        // Central heart-rate pulse core (theme color for high visibility)
+                        // Central heart-rate pulse core
                         SquadPulseCore(heartRate: member.heartRate, tintColor: indicatorColor)
-                            .frame(width: 6, height: 6)
+                            .frame(width: markers.pulseCoreSize, height: markers.pulseCoreSize)
                     }
-                    .frame(width: 26, height: 26)
+                    .frame(width: markers.markerFrameSize, height: markers.markerFrameSize)
                 }
             }
         }
-        .frame(width: 26, height: 26)
+        .frame(width: markers.markerFrameSize, height: markers.markerFrameSize)
         .overlay(alignment: .top) {
-            // Callsign directly under the icon without altering the view center anchor, following radar color scheme
-            Text(member.callsign)
-                .font(.system(size: 7, weight: .bold, design: .monospaced))
-                .foregroundColor((!isMe && member.isStale) ? .gray : radarColor)
-                .lineLimit(1)
-                .padding(.horizontal, 2.5)
-                .padding(.vertical, 0.5)
-                .background(Color.black.opacity(0.8))
-                .cornerRadius(2)
-                .fixedSize()
-                .offset(y: 28)
+            let cleanCallsign = member.callsign.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !cleanCallsign.isEmpty {
+                // Callsign directly under the icon without altering the view center anchor, following radar color scheme
+                Text(cleanCallsign)
+                    .font(.system(size: markers.callsignFontSize, weight: .bold, design: .monospaced))
+                    .foregroundColor((!isMe && member.isStale) ? .gray : radarColor)
+                    .lineLimit(1)
+                    .padding(.horizontal, 3.0)
+                    .padding(.vertical, 1.0)
+                    .background(Color.black.opacity(0.8))
+                    .cornerRadius(3)
+                    .fixedSize()
+                    .offset(y: markers.callsignYOffset)
+            }
         }
     }
 }

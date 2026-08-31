@@ -71,7 +71,31 @@ public struct SquadRoom: Identifiable, Codable, Equatable {
             ?? (decodedActivity + AppConstants.Timing.Inactivity.ttlDurationSeconds)
         hasPin = try container.decodeIfPresent(Bool.self, forKey: .hasPin) ?? false
         pinHash = try container.decodeIfPresent(String.self, forKey: .pinHash)
-        members = try container.decodeIfPresent([String: SquadMember].self, forKey: .members) ?? [:]
+        let rawMembers = try container.decodeIfPresent([String: SquadMember].self, forKey: .members) ?? [:]
+        var sanitizedMembers: [String: SquadMember] = [:]
+        for (memberKey, memberVal) in rawMembers {
+            if memberVal.id != memberKey {
+                let correctedMember = SquadMember(
+                    id: memberKey,
+                    callsign: memberVal.callsign,
+                    latitude: memberVal.latitude,
+                    longitude: memberVal.longitude,
+                    altitude: memberVal.altitude,
+                    heading: memberVal.heading,
+                    heartRate: memberVal.heartRate,
+                    batteryLevel: memberVal.batteryLevel,
+                    lastUpdatedTimestamp: memberVal.lastUpdatedTimestamp,
+                    sequenceNumber: memberVal.sequenceNumber,
+                    status: memberVal.status,
+                    isHost: memberVal.isHost,
+                    colorHex: memberVal.colorHex
+                )
+                sanitizedMembers[memberKey] = correctedMember
+            } else {
+                sanitizedMembers[memberKey] = memberVal
+            }
+        }
+        members = sanitizedMembers
         indicators = try container.decodeIfPresent([String: TacticalIndicator].self, forKey: .indicators) ?? [:]
     }
     

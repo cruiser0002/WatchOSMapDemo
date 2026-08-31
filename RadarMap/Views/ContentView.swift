@@ -14,7 +14,9 @@ public struct ContentView: View {
             .environmentObject(gameState)
             .preferredColorScheme(.dark)
             .onAppear {
-                updateWristActivity(phase: scenePhase)
+                DispatchQueue.main.async {
+                    updateWristActivity(phase: scenePhase)
+                }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {

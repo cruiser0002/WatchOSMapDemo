@@ -21,6 +21,7 @@ public struct SquadMember: Identifiable, Codable, Equatable {
     public var status: MemberStatus
     public var isHost: Bool
     public var colorHex: String        // Tactical marker color
+    public var lastAnimationDuration: TimeInterval // Delta time between packets for translation animation (0.0s for instant stepping)
     
     public var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -39,7 +40,8 @@ public struct SquadMember: Identifiable, Codable, Equatable {
         sequenceNumber: Int64 = 0,
         status: MemberStatus = .active,
         isHost: Bool = false,
-        colorHex: String = AppConstants.UI.defaultTacticalColorHex
+        colorHex: String = AppConstants.UI.defaultTacticalColorHex,
+        lastAnimationDuration: TimeInterval = 0.0
     ) {
         self.id = id
         self.callsign = callsign
@@ -54,6 +56,7 @@ public struct SquadMember: Identifiable, Codable, Equatable {
         self.status = status
         self.isHost = isHost
         self.colorHex = colorHex
+        self.lastAnimationDuration = lastAnimationDuration
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -73,7 +76,7 @@ public struct SquadMember: Identifiable, Codable, Equatable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
-        callsign = try container.decodeIfPresent(String.self, forKey: .callsign) ?? id
+        callsign = try container.decodeIfPresent(String.self, forKey: .callsign) ?? ""
         latitude = try container.decodeIfPresent(Double.self, forKey: .latitude) ?? 0.0
         longitude = try container.decodeIfPresent(Double.self, forKey: .longitude) ?? 0.0
         altitude = try container.decodeIfPresent(Double.self, forKey: .altitude)
@@ -85,7 +88,9 @@ public struct SquadMember: Identifiable, Codable, Equatable {
         status = try container.decodeIfPresent(MemberStatus.self, forKey: .status) ?? .active
         isHost = try container.decodeIfPresent(Bool.self, forKey: .isHost) ?? false
         colorHex = try container.decodeIfPresent(String.self, forKey: .colorHex) ?? AppConstants.UI.defaultTacticalColorHex
+        lastAnimationDuration = 0.0
     }
+    
     // MARK: - Stale / Inactivity Timeout Configuration
     
     /// Stale timeout multiplier (M). The number of missed update intervals

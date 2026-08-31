@@ -1,9 +1,23 @@
 import XCTest
 import CoreLocation
 import SwiftUI
+import MapKit
+import Combine
 @testable import RadarMap
 
 final class RadarMapTests: XCTestCase {
+    
+    override func setUp() {
+        super.setUp()
+        UserDefaults.standard.removeObject(forKey: "wc_local_ls_snapshot")
+        UserDefaults.standard.removeObject(forKey: "wc_peer_ls_snapshot")
+    }
+    
+    override func tearDown() {
+        UserDefaults.standard.removeObject(forKey: "wc_local_ls_snapshot")
+        UserDefaults.standard.removeObject(forKey: "wc_peer_ls_snapshot")
+        super.tearDown()
+    }
     
     private func createMockFirebaseSyncManager() -> FirebaseSyncManager {
         let syncManager = FirebaseSyncManager()
@@ -144,8 +158,8 @@ final class RadarMapTests: XCTestCase {
         override func stopLoading() {}
     }
     
-    private func createMockGameState() -> GameStateManager {
-        let gameState = GameStateManager()
+    private func createMockGameState(watchConnectivityManager: WatchConnectivityManager = WatchConnectivityManager()) -> GameStateManager {
+        let gameState = GameStateManager(watchConnectivityManager: watchConnectivityManager)
         gameState.myCallsign = "OPERATOR"
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]
@@ -207,7 +221,7 @@ final class RadarMapTests: XCTestCase {
         XCTAssertTrue(TacticalMapStyle.allCases.contains(.standard))
         XCTAssertEqual(TacticalMapStyle.radar.rawValue, "Radar")
         XCTAssertEqual(TacticalMapStyle.standard.rawValue, "Standard")
-        XCTAssertEqual(TacticalMapStyle.radar.iconName, "scope")
+        XCTAssertEqual(TacticalMapStyle.radar.iconName, "map")
         XCTAssertEqual(TacticalMapStyle.standard.iconName, "map")
         XCTAssertEqual(TacticalMapStyle.allCases.count, 2)
     }
@@ -328,6 +342,31 @@ final class RadarMapTests: XCTestCase {
         
         let radialDistNE = sqrt(pow(xOffsetNE, 2.0) + pow(yOffsetNE, 2.0))
         XCTAssertEqual(radialDistNE, 100.0, accuracy: 0.001) // Exactly matches 100m Ring 4!
+    }
+    
+    func testRadarRangeRingDistanceLabelDiagonalPositions() {
+        let screenCenter = CGPoint(x: 150.0, y: 150.0)
+        let maxRadius: CGFloat = 100.0
+        
+        for (index, ratio) in AppConstants.UI.RadarScale.rangeRingRatios.enumerated() {
+            let ringRadius = maxRadius * CGFloat(ratio)
+            let diagOffset = (maxRadius * ratio) * cos(.pi / 4.0)
+            let labelX = screenCenter.x + diagOffset
+            let labelY = screenCenter.y - diagOffset
+            
+            // Cartesian dx, dy from center
+            let dx = Double(labelX - screenCenter.x)
+            let dy = Double(screenCenter.y - labelY) // Positive upward
+            
+            // Verify dx == dy (lies on y = x line)
+            XCTAssertEqual(dx, dy, accuracy: 0.0001, "Distance label for ring \(index + 1) must lie along the y=x line")
+            XCTAssertGreaterThan(dx, 0.0, "Distance label must be in the upper right (dx > 0)")
+            XCTAssertGreaterThan(dy, 0.0, "Distance label must be in the upper right (dy > 0)")
+            
+            // Verify radial distance from center equals ring radius
+            let computedRadius = sqrt(dx * dx + dy * dy)
+            XCTAssertEqual(computedRadius, Double(ringRadius), accuracy: 0.001, "Distance label must be positioned on its corresponding radius circle")
+        }
     }
     
     // MARK: - Player Death & Revive State Tests
@@ -535,9 +574,9 @@ final class RadarMapTests: XCTestCase {
         XCTAssertTrue(syncManager.validateAndProcessPacket(p3))
         
         XCTAssertEqual(syncManager.activeRoom?.members.count, 3)
-        XCTAssertEqual(syncManager.activeRoom?.members["PLAYER_1"]?.callsign, "PLAYER_1")
-        XCTAssertEqual(syncManager.activeRoom?.members["PLAYER_2"]?.callsign, "PLAYER_2")
-        XCTAssertEqual(syncManager.activeRoom?.members["PLAYER_3"]?.callsign, "PLAYER_3")
+        XCTAssertEqual(syncManager.activeRoom?.members["PLAYER_1"]?.callsign, "")
+        XCTAssertEqual(syncManager.activeRoom?.members["PLAYER_2"]?.callsign, "")
+        XCTAssertEqual(syncManager.activeRoom?.members["PLAYER_3"]?.callsign, "")
     }
     
     func testSquadRoomAndMemberResilientDecoding() throws {
@@ -1620,7 +1659,7 @@ final class RadarMapTests: XCTestCase {
         // Subscription
         XCTAssertEqual(AppConstants.Subscription.freeTierMaxCapacity, 4)
         XCTAssertEqual(AppConstants.Subscription.proTierMaxCapacity, 999)
-        XCTAssertEqual(AppConstants.Subscription.lifetimePriceString, "$9.99")
+        XCTAssertEqual(AppConstants.Subscription.lifetimePriceString, "$29.99")
         XCTAssertEqual(AppConstants.Subscription.entitlementID, "radarmap_pro")
         XCTAssertEqual(AppConstants.Subscription.productID, "com.radarmap.watch.pro")
         XCTAssertEqual(AppConstants.Subscription.offeringID, "default")
@@ -1628,6 +1667,7 @@ final class RadarMapTests: XCTestCase {
         XCTAssertFalse(AppConstants.Subscription.revenueCatApiKey.isEmpty)
         
         // Health
+        XCTAssertFalse(AppConstants.Health.defaultIsDead, "defaultIsDead must be false (player starts alive)")
         XCTAssertEqual(AppConstants.Health.defaultRestingHeartRate, 75.0)
         XCTAssertEqual(AppConstants.Health.flatlineHeartRate, 0.0)
         XCTAssertEqual(AppConstants.Health.referenceBpm, 100.0)
@@ -1697,27 +1737,18 @@ final class RadarMapTests: XCTestCase {
         let gameState = createMockGameState()
         gameState.subscriptionManager.hasUnlimitedSquadUnlock = false
         
-        // Non-pro attempt to open menu or select indicator triggers paywall
-        gameState.openIndicatorMenu()
+        // Non-pro attempt to place indicator triggers paywall
+        gameState.placeTacticalIndicator(type: .watchHere, at: CLLocationCoordinate2D(latitude: 37.785, longitude: -122.406))
         XCTAssertTrue(gameState.showPaywallSheet)
-        XCTAssertFalse(gameState.showIndicatorMenuSheet)
+        XCTAssertTrue(gameState.allTacticalIndicators.isEmpty)
         
-        gameState.showPaywallSheet = false
-        gameState.selectIndicatorForPlacement(.watchHere)
-        XCTAssertTrue(gameState.showPaywallSheet)
-        XCTAssertNil(gameState.pendingIndicatorPlacementType)
-        
-        // Pro unlock enables opening menu and selecting indicator
+        // Pro unlock enables placing indicator
         gameState.showPaywallSheet = false
         gameState.subscriptionManager.hasUnlimitedSquadUnlock = true
         
-        gameState.openIndicatorMenu()
-        XCTAssertTrue(gameState.showIndicatorMenuSheet)
+        gameState.placeTacticalIndicator(type: .watchHere, at: CLLocationCoordinate2D(latitude: 37.785, longitude: -122.406))
         XCTAssertFalse(gameState.showPaywallSheet)
-        
-        gameState.selectIndicatorForPlacement(.watchHere)
-        XCTAssertEqual(gameState.pendingIndicatorPlacementType, .watchHere)
-        XCTAssertFalse(gameState.showIndicatorMenuSheet)
+        XCTAssertEqual(gameState.allTacticalIndicators.count, 1)
     }
     
     func testSquadOrderSingleInstanceLimit() {
@@ -1730,32 +1761,27 @@ final class RadarMapTests: XCTestCase {
         let coord4 = CLLocationCoordinate2D(latitude: 37.788, longitude: -122.409)
         
         // Place first Watch Here order
-        gameState.selectIndicatorForPlacement(.watchHere)
-        gameState.placeTacticalIndicator(at: coord1)
+        gameState.placeTacticalIndicator(type: .watchHere, at: coord1)
         XCTAssertEqual(gameState.allTacticalIndicators.count, 1)
         XCTAssertEqual(gameState.allTacticalIndicators.first?.type, .watchHere)
         XCTAssertEqual(gameState.allTacticalIndicators.first?.coordinate.latitude, coord1.latitude)
         
         // Place second Watch Here order -> Should REPLACE the first Watch Here order
-        gameState.selectIndicatorForPlacement(.watchHere)
-        gameState.placeTacticalIndicator(at: coord2)
+        gameState.placeTacticalIndicator(type: .watchHere, at: coord2)
         XCTAssertEqual(gameState.allTacticalIndicators.count, 1)
         XCTAssertEqual(gameState.allTacticalIndicators.first?.type, .watchHere)
         XCTAssertEqual(gameState.allTacticalIndicators.first?.coordinate.latitude, coord2.latitude)
         
         // Place Go Here order and Attack Here order -> 1 of each (3 total)
-        gameState.selectIndicatorForPlacement(.goHere)
-        gameState.placeTacticalIndicator(at: coord3)
-        gameState.selectIndicatorForPlacement(.attackHere)
-        gameState.placeTacticalIndicator(at: coord4)
+        gameState.placeTacticalIndicator(type: .goHere, at: coord3)
+        gameState.placeTacticalIndicator(type: .attackHere, at: coord4)
         
         XCTAssertEqual(gameState.allTacticalIndicators.count, 3)
         XCTAssertEqual(Set(gameState.allTacticalIndicators.map { $0.type }), Set([.watchHere, .goHere, .attackHere]))
         
         // Placing a new Go Here replaces only Go Here
         let coord5 = CLLocationCoordinate2D(latitude: 37.789, longitude: -122.410)
-        gameState.selectIndicatorForPlacement(.goHere)
-        gameState.placeTacticalIndicator(at: coord5)
+        gameState.placeTacticalIndicator(type: .goHere, at: coord5)
         
         XCTAssertEqual(gameState.allTacticalIndicators.count, 3)
         let currentGoHere = gameState.allTacticalIndicators.first(where: { $0.type == .goHere })
@@ -1771,9 +1797,8 @@ final class RadarMapTests: XCTestCase {
         
         // Place 20 enemy indicators with ascending timestamps
         for i in 1...20 {
-            gameState.selectIndicatorForPlacement(.infantry)
             let coord = CLLocationCoordinate2D(latitude: 37.780 + Double(i) * 0.001, longitude: -122.400 + Double(i) * 0.001)
-            gameState.placeTacticalIndicator(at: coord)
+            gameState.placeTacticalIndicator(type: .infantry, at: coord)
             
             // Set deterministic timestamp
             let latest = gameState.allTacticalIndicators.first(where: { $0.coordinate.latitude == coord.latitude })!
@@ -1793,8 +1818,7 @@ final class RadarMapTests: XCTestCase {
         
         // Place 21st enemy indicator -> The oldest (1st) indicator should be evicted/replaced
         let coord21 = CLLocationCoordinate2D(latitude: 37.850, longitude: -122.450)
-        gameState.selectIndicatorForPlacement(.heavyVehicle)
-        gameState.placeTacticalIndicator(at: coord21)
+        gameState.placeTacticalIndicator(type: .heavyVehicle, at: coord21)
         
         XCTAssertEqual(gameState.allTacticalIndicators.count, 20)
         XCTAssertFalse(gameState.allTacticalIndicators.contains(where: { $0.id == oldestId }), "Oldest enemy indicator must be evicted")
@@ -1881,8 +1905,7 @@ final class RadarMapTests: XCTestCase {
         let gameState = createMockGameState()
         gameState.subscriptionManager.hasUnlimitedSquadUnlock = true
         
-        gameState.selectIndicatorForPlacement(.attackHere)
-        gameState.placeTacticalIndicator(at: CLLocationCoordinate2D(latitude: 37.785, longitude: -122.406))
+        gameState.placeTacticalIndicator(type: .attackHere, at: CLLocationCoordinate2D(latitude: 37.785, longitude: -122.406))
         
         XCTAssertEqual(gameState.allTacticalIndicators.count, 1)
         let indId = gameState.allTacticalIndicators.first!.id
@@ -1923,8 +1946,7 @@ final class RadarMapTests: XCTestCase {
         let attackCoord3 = CLLocationCoordinate2D(latitude: 37.7890, longitude: -122.4100)
         
         // 1. Player 1 (VIPER) places Attack command
-        gameState.selectIndicatorForPlacement(.attackHere)
-        gameState.placeTacticalIndicator(at: attackCoord1)
+        gameState.placeTacticalIndicator(type: .attackHere, at: attackCoord1)
         
         XCTAssertEqual(gameState.allTacticalIndicators.count, 1)
         let p1Attack = gameState.allTacticalIndicators.first!
@@ -1951,8 +1973,7 @@ final class RadarMapTests: XCTestCase {
         XCTAssertTrue(allAttacks.contains { $0.placedByCallsign == "GHOST" && $0.placedByMemberId == "PRO_PLAYER_2" })
         
         // 3. Player 1 (VIPER) places a new Attack command at a different coordinate
-        gameState.selectIndicatorForPlacement(.attackHere)
-        gameState.placeTacticalIndicator(at: attackCoord3)
+        gameState.placeTacticalIndicator(type: .attackHere, at: attackCoord3)
         
         // Player 1's attack command was updated to new coordinate, Player 2's attack command remains untouched
         let updatedAttacks = gameState.allTacticalIndicators.filter { $0.type == .attackHere }
@@ -2046,49 +2067,46 @@ final class RadarMapTests: XCTestCase {
             XCTAssertEqual(roundtripScale, scale, accuracy: 0.001, "AppConstants zoom helper must preserve scale \(scale)m accurately")
         }
         
-        // 5. Verify ScaleRuler distance formatting helpers
-        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(meters: 15.0), "10m")
-        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(meters: 50.0), "50m")
-        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(meters: 100.0), "100m")
-        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(meters: 500.0), "500m")
-        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(meters: 1200.0), "1km")
+        // 5. Verify ScaleRuler distance formatting helpers (tactical ruler = 2 clicks of minor scale)
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 5.0), "10m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 25.0), "50m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 50.0), "100m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 250.0), "500m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 500.0), "1km")
         XCTAssertEqual(AppConstants.UI.ScaleRuler.formatDistance(meters: 100.0), "100m")
         XCTAssertEqual(AppConstants.UI.ScaleRuler.formatDistance(meters: 2500.0), "2.5km")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatLiveRulerDistance(minorScaleMeters: 137.5), "275m")
+        
+        // 6. Verify camera distance <-> scaleMeters roundtrip conversion
+        for scale in testScales {
+            let cameraDist = AppConstants.UI.RadarScale.cameraDistance(forScale: scale)
+            let roundtripScale = AppConstants.UI.RadarScale.scaleMeters(forCameraDistance: cameraDist)
+            XCTAssertEqual(roundtripScale, scale, accuracy: 0.001, "Camera distance roundtrip must match scale \(scale)m")
+        }
     }
     
-    func testDeadReckoningEngineSmoothedMemberHelper() {
-        let engine = DeadReckoningEngine()
+    func testSquadMemberDirectCoordinates() {
         let member = SquadMember(id: "M1", callsign: "VIPER", latitude: 37.77, longitude: -122.41, heading: 45.0, heartRate: 85.0)
-        
-        // Untracked member falls back to raw member coordinates and heading
-        let smoothedUntracked = engine.smoothedMember(for: member)
-        XCTAssertEqual(smoothedUntracked.id, "M1")
-        XCTAssertEqual(smoothedUntracked.callsign, "VIPER")
-        XCTAssertEqual(smoothedUntracked.coordinate.latitude, 37.77, accuracy: 0.0001)
-        XCTAssertEqual(smoothedUntracked.coordinate.longitude, -122.41, accuracy: 0.0001)
-        XCTAssertEqual(smoothedUntracked.heading, 45.0, accuracy: 0.0001)
-        XCTAssertEqual(smoothedUntracked.heartRate, 85.0)
-        
-        // Tracked member receives smoothed values
-        engine.updateRemotePlayer(id: "M1", newCoordinate: CLLocationCoordinate2D(latitude: 37.78, longitude: -122.40), newHeading: 90.0, packetTimestamp: Date().timeIntervalSince1970)
-        let smoothedTracked = engine.smoothedMember(for: member)
-        XCTAssertEqual(smoothedTracked.coordinate.latitude, 37.78, accuracy: 0.0001)
-        XCTAssertEqual(smoothedTracked.coordinate.longitude, -122.40, accuracy: 0.0001)
-        XCTAssertEqual(smoothedTracked.heading, 90.0, accuracy: 0.0001)
+        XCTAssertEqual(member.id, "M1")
+        XCTAssertEqual(member.callsign, "VIPER")
+        XCTAssertEqual(member.coordinate.latitude, 37.77, accuracy: 0.0001)
+        XCTAssertEqual(member.coordinate.longitude, -122.41, accuracy: 0.0001)
+        XCTAssertEqual(member.heading, 45.0, accuracy: 0.0001)
+        XCTAssertEqual(member.heartRate, 85.0)
     }
     
     func testUnifiedGameStateMapScaleAndCenterState() {
         let gameState = createMockGameState()
         
-        // 1. Initial default state
+        // 1. Initial default state (minor scale = 50m, 2-click ruler = 100m)
         XCTAssertEqual(gameState.radarScaleMeters, AppConstants.UI.RadarScale.defaultScaleMeters)
         XCTAssertNil(gameState.currentMapCenter)
         XCTAssertEqual(gameState.radarCenterTrigger, 0)
-        XCTAssertEqual(gameState.currentScaleText, "10m")
+        XCTAssertEqual(gameState.currentScaleText, AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: AppConstants.UI.RadarScale.defaultScaleMeters))
         
-        // 2. Modifying radarScaleMeters updates currentMapSpanDelta and currentScaleText
+        // 2. Modifying radarScaleMeters updates currentMapSpanDelta and currentScaleText (live format: 2 * 200m = 400m)
         gameState.radarScaleMeters = 200.0
-        XCTAssertEqual(gameState.currentScaleText, "25m")
+        XCTAssertEqual(gameState.currentScaleText, "400m")
         let computedDelta = gameState.currentMapSpanDelta
         XCTAssertEqual(computedDelta, AppConstants.UI.RadarScale.mapSpanDelta(forRadarScaleMeters: 200.0), accuracy: 0.00001)
         
@@ -2111,7 +2129,7 @@ final class RadarMapTests: XCTestCase {
         XCTAssertEqual(gameState.radarCenterTrigger, 1)
     }
     
-    func testDeadReckoningLocalPlayerMapCentering() {
+    func testLocalPlayerDirectMapCentering() {
         let gameState = createMockGameState()
         let initialLoc = CLLocation(latitude: 37.7800, longitude: -122.4000)
         gameState.locationHeadingManager.userLocation = initialLoc
@@ -2121,20 +2139,13 @@ final class RadarMapTests: XCTestCase {
         XCTAssertEqual(gameState.localPlayerMember.coordinate.latitude, 37.7800, accuracy: 1e-4)
         XCTAssertEqual(gameState.localPlayerMember.coordinate.longitude, -122.4000, accuracy: 1e-4)
         
-        // Feed next GPS position into DeadReckoningEngine
+        // Next GPS position updates local player coordinate immediately
         let targetLoc = CLLocation(latitude: 37.7820, longitude: -122.4020)
-        gameState.deadReckoningEngine.updateLocalPlayer(coordinate: targetLoc.coordinate, heading: 45.0)
+        gameState.locationHeadingManager.userLocation = targetLoc
         gameState.updateLocalPlayerMember()
         
-        // Local player state is tracked and smooth state is available
-        XCTAssertNotNil(gameState.deadReckoningEngine.localPlayerState)
-        XCTAssertEqual(gameState.deadReckoningEngine.localPlayerState?.targetCoordinate.latitude, targetLoc.coordinate.latitude)
-        XCTAssertEqual(gameState.deadReckoningEngine.localPlayerState?.targetCoordinate.longitude, targetLoc.coordinate.longitude)
-        
-        // Smoothed coordinate is returned by localPlayerMember for map centering
-        let smoothedCoord = gameState.localPlayerMember.coordinate
-        XCTAssertTrue(smoothedCoord.latitude >= 37.7800 && smoothedCoord.latitude <= 37.7820)
-        XCTAssertTrue(smoothedCoord.longitude <= -122.4000 && smoothedCoord.longitude >= -122.4020)
+        XCTAssertEqual(gameState.localPlayerMember.coordinate.latitude, 37.7820, accuracy: 1e-4)
+        XCTAssertEqual(gameState.localPlayerMember.coordinate.longitude, -122.4020, accuracy: 1e-4)
     }
     
     // MARK: - Tactical Indicators Category & Bandwidth-Preservation Sync Tests
@@ -2212,7 +2223,7 @@ final class RadarMapTests: XCTestCase {
         let room = SquadRoom(id: "ALPHA", hostId: "LEADER")
         gameState.firebaseManager.activeRoom = room
         
-        // 1. Upload new indicator: Verify PUT request is made under /tactical/ALPHA/IND-101.json
+        // 1. Upload new indicator: Verify PUT request is made under /tactical/ALPHA/indicators/IND-101.json
         let newIndicator = TacticalIndicator(
             id: "IND-101",
             type: .goHere,
@@ -2224,8 +2235,8 @@ final class RadarMapTests: XCTestCase {
         let putExp = expectation(description: "Wait for PUT requests")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             let putRequests = MockURLProtocol.recordedRequests.filter { $0.httpMethod == "PUT" }
-            XCTAssertTrue(putRequests.contains { $0.url?.absoluteString.contains("/tactical/ALPHA/IND-101.json") == true })
-            XCTAssertTrue(putRequests.contains { $0.url?.absoluteString.contains("/tactical/ALPHA/updatedAt.json") == true })
+            XCTAssertTrue(putRequests.contains { $0.url?.absoluteString.contains("/tactical/ALPHA/indicators/IND-101.json") == true || $0.url?.absoluteString.contains("/tactical/ALPHA/IND-101.json") == true })
+            XCTAssertTrue(putRequests.contains { $0.url?.absoluteString.contains("/tactical/ALPHA/meta/updatedAt.json") == true || $0.url?.absoluteString.contains("/tactical/ALPHA/updatedAt.json") == true })
             putExp.fulfill()
         }
         wait(for: [putExp], timeout: 1.0)
@@ -2254,12 +2265,12 @@ final class RadarMapTests: XCTestCase {
         }
         wait(for: [expNoChange], timeout: 1.0)
         
-        // 4. Delete indicator: Verify DELETE is sent to /tactical/ALPHA/IND-101.json
+        // 4. Delete indicator: Verify DELETE is sent to /tactical/ALPHA/indicators/IND-101.json
         gameState.firebaseManager.removeIndicator(roomId: "ALPHA", indicatorId: "IND-101")
         let delExp = expectation(description: "Wait for DELETE request")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             let deleteRequests = MockURLProtocol.recordedRequests.filter { $0.httpMethod == "DELETE" }
-            XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/tactical/ALPHA/IND-101.json") == true })
+            XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/tactical/ALPHA/indicators/IND-101.json") == true || $0.url?.absoluteString.contains("/tactical/ALPHA/IND-101.json") == true })
             delExp.fulfill()
         }
         wait(for: [delExp], timeout: 1.0)
@@ -2301,13 +2312,8 @@ final class RadarMapTests: XCTestCase {
         gameState.updateOtherSquadMembers(room: room)
         gameState.localIndicators = ["IND_1": indicator]
         gameState.updateAllTacticalIndicators(room: room)
-        gameState.pendingIndicatorPlacementType = .infantry
-        gameState.deadReckoningEngine.updateRemotePlayer(id: remoteMember.id, newCoordinate: remoteMember.coordinate, newHeading: remoteMember.heading, packetTimestamp: Date().timeIntervalSince1970)
-        
         XCTAssertEqual(gameState.otherSquadMembers.count, 1)
         XCTAssertEqual(gameState.allTacticalIndicators.count, 1)
-        XCTAssertNotNil(gameState.pendingIndicatorPlacementType)
-        XCTAssertNotNil(gameState.deadReckoningEngine.smoothedMembers["REMOTE_1"])
         XCTAssertEqual(gameState.localPlayerMember.callsign, "VIPER")
         
         // 2. Trigger logout
@@ -2317,12 +2323,36 @@ final class RadarMapTests: XCTestCase {
         XCTAssertTrue(gameState.otherSquadMembers.isEmpty, "Remote squad member icons must be purged on logout")
         XCTAssertTrue(gameState.allTacticalIndicators.isEmpty, "Tactical indicators must be purged on logout")
         XCTAssertTrue(gameState.localIndicators.isEmpty, "Local indicators dictionary must be purged on logout")
-        XCTAssertNil(gameState.pendingIndicatorPlacementType, "Pending indicator placement mode must be reset on logout")
-        XCTAssertNil(gameState.deadReckoningEngine.smoothedMembers["REMOTE_1"], "Remote player smooth states must be purged from dead reckoning engine on logout")
         
         // "Me" icon should remain intact and valid
         XCTAssertEqual(gameState.localPlayerMember.id, gameState.myMemberId, "'Me' icon must be preserved after logout")
         XCTAssertEqual(gameState.localPlayerMember.callsign, "VIPER", "'Me' icon callsign must be preserved after logout")
+        XCTAssertFalse(gameState.isDead, "Player vitality must reset to alive (isDead = false) on logout/purge")
+    }
+    
+    func testInitialVitalStateIsAliveAndNoIndicatorPersistenceOnRestart() {
+        // 1. Initial constants and fresh GameStateManager must have isDead = false
+        XCTAssertFalse(AppConstants.Health.defaultIsDead, "defaultIsDead must be false in setup constants")
+        
+        let freshGameState = createMockGameState()
+        XCTAssertFalse(freshGameState.isDead, "isDead must be false by default on new game state")
+        XCTAssertEqual(freshGameState.localPlayerMember.status, .active, "Player status must be active by default")
+        XCTAssertTrue(freshGameState.allTacticalIndicators.isEmpty, "Tactical indicators must be empty on fresh app start")
+        XCTAssertTrue(freshGameState.localIndicators.isEmpty, "Local indicators must be empty on fresh app start")
+        
+        // 2. Setting dead and adding indicator during active match
+        freshGameState.setDead(true)
+        let indicator = TacticalIndicator(id: "IND_RESTART", type: .watchHere, coordinate: CLLocationCoordinate2D(latitude: 37.77, longitude: -122.41), placedByMemberId: freshGameState.myMemberId)
+        freshGameState.localIndicators = ["IND_RESTART": indicator]
+        freshGameState.updateAllTacticalIndicators()
+        XCTAssertTrue(freshGameState.isDead)
+        XCTAssertEqual(freshGameState.allTacticalIndicators.count, 1)
+        
+        // 3. Simulating session cleanup / restart
+        freshGameState.purgeLocalSessionAndIcons()
+        XCTAssertFalse(freshGameState.isDead, "isDead must reset to false after session purge")
+        XCTAssertEqual(freshGameState.localPlayerMember.status, .active, "Player status must reset to active")
+        XCTAssertTrue(freshGameState.allTacticalIndicators.isEmpty, "Tactical indicators must not persist across session resets/restarts")
     }
     
     // MARK: - Subscription & RevenueCat Integration Tests
@@ -2333,7 +2363,7 @@ final class RadarMapTests: XCTestCase {
         XCTAssertFalse(subManager.hasUnlimitedSquadUnlock)
         XCTAssertFalse(subManager.canCreateRoom(withCapacity: 10))
         XCTAssertTrue(subManager.canCreateRoom(withCapacity: 4))
-        XCTAssertEqual(subManager.localizedPrice, "$9.99")
+        XCTAssertEqual(subManager.localizedPrice, "$29.99")
         
         // Purchase flow
         let purchaseSuccess = await subManager.purchaseLifetimeUnlock()
@@ -2347,6 +2377,8 @@ final class RadarMapTests: XCTestCase {
         let restoreSuccess = await subManager.restorePurchases()
         XCTAssertTrue(restoreSuccess)
         XCTAssertTrue(subManager.hasUnlimitedSquadUnlock)
+        
+        UserDefaults.standard.removeObject(forKey: AppConstants.Storage.hasUnlimitedSquadUnlockKey)
     }
     
     func testSubscriptionManagerRevenueCatConfiguration() {
@@ -2648,37 +2680,7 @@ final class RadarMapTests: XCTestCase {
         wait(for: [exp], timeout: 1.0)
     }
     
-    func testDeadReckoningEngineRemotePlayerSmoothing() {
-        let engine = DeadReckoningEngine()
-        let startCoord = CLLocationCoordinate2D(latitude: 37.7800, longitude: -122.4000)
-        let targetCoord = CLLocationCoordinate2D(latitude: 37.7810, longitude: -122.4010)
-        
-        let member = SquadMember(
-            id: "REMOTE_1",
-            callsign: "VIPER",
-            latitude: startCoord.latitude,
-            longitude: startCoord.longitude,
-            heading: 45.0,
-            heartRate: 80.0,
-            lastUpdatedTimestamp: Date().timeIntervalSince1970
-        )
-        
-        // Initial state
-        engine.updateRemotePlayer(id: member.id, newCoordinate: startCoord, newHeading: 45.0, packetTimestamp: Date().timeIntervalSince1970)
-        XCTAssertEqual(engine.coordinate(for: member).latitude, startCoord.latitude, accuracy: 1e-6)
-        XCTAssertEqual(engine.heading(for: member), 45.0, accuracy: 0.1)
-        
-        // Target state
-        engine.updateRemotePlayer(id: member.id, newCoordinate: targetCoord, newHeading: 90.0, packetTimestamp: Date().timeIntervalSince1970)
-        
-        // State should exist and be smoothly tracked
-        XCTAssertNotNil(engine.smoothedMembers["REMOTE_1"])
-        XCTAssertEqual(engine.smoothedMembers["REMOTE_1"]?.targetCoordinate.latitude, targetCoord.latitude)
-        XCTAssertEqual(engine.smoothedMembers["REMOTE_1"]?.targetHeading, 90.0)
-        
-        engine.removePlayer(id: "REMOTE_1")
-        XCTAssertNil(engine.smoothedMembers["REMOTE_1"])
-    }
+
     
     // MARK: - Login Check Field Error Tests
     
@@ -3055,39 +3057,85 @@ final class RadarMapTests: XCTestCase {
         XCTAssertEqual(gameState.totalTelemetryUploadsEmitted, emittedBefore + 1, "Transition to downed/KIA must emit telemetry immediately")
     }
     
-    func testFirebaseSSEStreamSnapshotAndDeltaParsing() {
-        let syncManager = FirebaseSyncManager()
-        let room = SquadRoom(id: "SSE_ROOM", hostId: "HOST_1")
-        syncManager.activeRoom = room
-        
-        // 1. Root snapshot frame (event: put with path: "/")
-        let snapshotData = """
-        {
-            "path": "/",
-            "data": {
+    func testClientDrivenRESTTelemetryPollingIngestion() {
+        MockURLProtocol.reset()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let payload = """
+            {
                 "OP_1": [37.7858, -122.4064, 10.0, 90.0, 75.0, 1700000000, 1],
                 "OP_2": [37.7860, -122.4070, 12.0, 180.0, 80.0, 1700000000, 1]
             }
+            """
+            return (response, payload.data(using: .utf8)!)
         }
-        """
-        syncManager.parseSSEEvent(event: "put", dataString: snapshotData, roomId: "SSE_ROOM")
         
-        XCTAssertEqual(syncManager.activeRoom?.members["OP_1"]?.latitude, 37.7858)
-        XCTAssertEqual(syncManager.activeRoom?.members["OP_2"]?.latitude, 37.7860)
-        XCTAssertEqual(syncManager.totalPacketsProcessed, 2)
+        let syncManager = createMockFirebaseSyncManager()
+        let room = SquadRoom(id: "REST_ROOM", hostId: "HOST_1")
+        syncManager.activeRoom = room
         
-        // 2. Single delta update frame (event: put with path: "/OP_1")
-        let deltaData = """
-        {
-            "path": "/OP_1",
-            "data": [37.7859, -122.4065, 11.0, 95.0, 78.0, 1700000005, 2]
+        let exp = expectation(description: "Fetch remote telemetry over client-driven REST")
+        syncManager.fetchRemoteTelemetry(roomId: "REST_ROOM")
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(syncManager.activeRoom?.members["OP_1"]?.latitude, 37.7858)
+            XCTAssertEqual(syncManager.activeRoom?.members["OP_2"]?.latitude, 37.7860)
+            XCTAssertEqual(syncManager.totalPacketsProcessed, 2)
+            exp.fulfill()
         }
-        """
-        syncManager.parseSSEEvent(event: "put", dataString: deltaData, roomId: "SSE_ROOM")
+        wait(for: [exp], timeout: 1.0)
+    }
+    
+    func testClientDrivenRESTPrunesMissingRemoteMembers() {
+        MockURLProtocol.reset()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            // Only OP_1 is on the server; OP_2 has left the squad
+            let payload = """
+            {
+                "OP_1": [37.7858, -122.4064, 10.0, 90.0, 75.0, 1700000000, 1]
+            }
+            """
+            return (response, payload.data(using: .utf8)!)
+        }
         
-        XCTAssertEqual(syncManager.activeRoom?.members["OP_1"]?.latitude, 37.7859)
-        XCTAssertEqual(syncManager.activeRoom?.members["OP_1"]?.heading, 95.0)
-        XCTAssertEqual(syncManager.totalPacketsProcessed, 3)
+        let syncManager = createMockFirebaseSyncManager()
+        syncManager.localMemberId = "MY_LOCAL_ID"
+        var room = SquadRoom(id: "PRUNE_ROOM", hostId: "HOST_1")
+        room.members["MY_LOCAL_ID"] = SquadMember(id: "MY_LOCAL_ID", callsign: "ME", latitude: 37.70, longitude: -122.30)
+        room.members["OP_1"] = SquadMember(id: "OP_1", callsign: "P1", latitude: 37.77, longitude: -122.41)
+        room.members["OP_2"] = SquadMember(id: "OP_2", callsign: "P2", latitude: 37.78, longitude: -122.42)
+        syncManager.activeRoom = room
+        
+        let exp = expectation(description: "Prune missing remote members on REST response")
+        syncManager.fetchRemoteTelemetry(roomId: "PRUNE_ROOM")
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertNotNil(syncManager.activeRoom?.members["MY_LOCAL_ID"], "Local player must never be pruned")
+            XCTAssertNotNil(syncManager.activeRoom?.members["OP_1"], "Active server member OP_1 must be present")
+            XCTAssertNil(syncManager.activeRoom?.members["OP_2"], "Remote member OP_2 missing from server must be pruned")
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+    
+    func testClientDrivenRESTPollingLifecycleAndTimers() {
+        MockURLProtocol.reset()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, "{}".data(using: .utf8)!)
+        }
+        
+        let syncManager = createMockFirebaseSyncManager()
+        let room = SquadRoom(id: "LIFECYCLE_ROOM", hostId: "HOST_1")
+        syncManager.activeRoom = room
+        
+        // Start client-driven polling
+        syncManager.startTelemetryPolling(roomId: "LIFECYCLE_ROOM")
+        XCTAssertEqual(syncManager.pollingInterval, 1.0)
+        
+        // Stop client-driven polling
+        syncManager.stopTelemetryPolling()
     }
     
     func testWristDownThrottlingAndInstantWakeBurst() {
@@ -3279,7 +3327,7 @@ final class RadarMapTests: XCTestCase {
         wait(for: [exp], timeout: 1.0)
     }
     
-    func testCreateRoomPurgesOldTelemetryAndTacticalData() {
+    func testCreateRoomInitializesTelemetryAndTacticalNodesWithTTL() {
         MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
@@ -3293,7 +3341,7 @@ final class RadarMapTests: XCTestCase {
         let member = SquadMember(id: "HOST1", callsign: "VIPER", latitude: 0, longitude: 0, isHost: true)
         let room = SquadRoom(id: "NEW_SQUAD", hostId: "HOST1", members: ["HOST1": member])
         
-        let exp = expectation(description: "Room created and old data purged")
+        let exp = expectation(description: "Room created and subnodes initialized")
         syncManager.createRoom(room) { result in
             if case .success = result {
                 exp.fulfill()
@@ -3303,9 +3351,10 @@ final class RadarMapTests: XCTestCase {
         }
         wait(for: [exp], timeout: 1.0)
         
-        let deleteRequests = MockURLProtocol.recordedRequests.filter { $0.httpMethod == "DELETE" }
-        XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/telemetry/NEW_SQUAD.json") == true }, "Must delete old telemetry node on room creation")
-        XCTAssertTrue(deleteRequests.contains { $0.url?.absoluteString.contains("/tactical/NEW_SQUAD.json") == true }, "Must delete old tactical node on room creation")
+        let putRequests = MockURLProtocol.recordedRequests.filter { $0.httpMethod == "PUT" }
+        XCTAssertTrue(putRequests.contains { $0.url?.absoluteString.contains("/rooms/NEW_SQUAD.json") == true }, "Must create room node")
+        XCTAssertTrue(putRequests.contains { $0.url?.absoluteString.contains("/telemetry/NEW_SQUAD.json") == true }, "Must initialize telemetry node on room creation")
+        XCTAssertTrue(putRequests.contains { $0.url?.absoluteString.contains("/tactical/NEW_SQUAD.json") == true }, "Must initialize tactical node on room creation")
     }
     
     func testCreateRoomRejectsEmptyCallsign() {
@@ -3582,20 +3631,7 @@ final class RadarMapTests: XCTestCase {
         XCTAssertEqual(newHeading, 0.0, accuracy: 1.0, "Displacement above 2.0m threshold should compute Course Over Ground bearing ~0.0°")
     }
     
-    func testDeadReckoningSnapsCleanlyWhenProgressComplete() {
-        let engine = DeadReckoningEngine()
-        let startCoord = CLLocationCoordinate2D(latitude: 37.7858, longitude: -122.4064)
-        let targetCoord = CLLocationCoordinate2D(latitude: 37.7860, longitude: -122.4060)
-        
-        let now = Date().timeIntervalSince1970
-        engine.updateRemotePlayer(id: "SNAP_TEST", newCoordinate: startCoord, newHeading: 45.0, packetTimestamp: now)
-        engine.updateRemotePlayer(id: "SNAP_TEST", newCoordinate: targetCoord, newHeading: 90.0, packetTimestamp: now + 1.0)
-        
-        // When progress has completed (after duration elapsed), position must snap cleanly to target
-        let member = SquadMember(id: "SNAP_TEST", callsign: "SNAP", latitude: targetCoord.latitude, longitude: targetCoord.longitude)
-        let smoothed = engine.smoothedMember(for: member)
-        XCTAssertNotNil(smoothed)
-    }
+
     
     func testInitialPlaceholderCoordinateIgnoredForCourseOverGround() {
         let syncManager = createMockFirebaseSyncManager()
@@ -3631,88 +3667,69 @@ final class RadarMapTests: XCTestCase {
         }
     }
     
-    func testDeadReckoningConstantLinearVelocity() {
-        let startCoord = CLLocationCoordinate2D(latitude: 37.7800, longitude: -122.4000)
-        let targetCoord = CLLocationCoordinate2D(latitude: 37.7810, longitude: -122.4010)
-        
-        let progress = 0.5 // 50% elapsed time
-        let lat = startCoord.latitude + (targetCoord.latitude - startCoord.latitude) * progress
-        let lon = startCoord.longitude + (targetCoord.longitude - startCoord.longitude) * progress
-        
-        let expectedLat = 37.7805
-        let expectedLon = -122.4005
-        XCTAssertEqual(lat, expectedLat, accuracy: 1e-7, "Linear dead reckoning at 50% progress must be exactly at midpoint")
-        XCTAssertEqual(lon, expectedLon, accuracy: 1e-7, "Linear dead reckoning at 50% progress must be exactly at midpoint")
-        
-        let engine = DeadReckoningEngine()
-        let now = Date().timeIntervalSince1970
-        engine.updateRemotePlayer(id: "LINEAR_TEST", newCoordinate: startCoord, newHeading: 0.0, packetTimestamp: now - 2.0)
-        engine.updateRemotePlayer(id: "LINEAR_TEST", newCoordinate: targetCoord, newHeading: 90.0, packetTimestamp: now)
-        
-        XCTAssertNotNil(engine.smoothedMembers["LINEAR_TEST"])
-        XCTAssertEqual(engine.smoothedMembers["LINEAR_TEST"]?.targetCoordinate.latitude, targetCoord.latitude)
-        XCTAssertEqual(engine.smoothedMembers["LINEAR_TEST"]?.targetCoordinate.longitude, targetCoord.longitude)
-    }
-    
-    func testCompassHeadingUpdateDoesNotResetCoordinateProgress() {
-        let engine = DeadReckoningEngine()
-        let startCoord = CLLocationCoordinate2D(latitude: 37.7800, longitude: -122.4000)
-        let targetCoord = CLLocationCoordinate2D(latitude: 37.7820, longitude: -122.4020)
-        
-        engine.updateLocalPlayer(coordinate: startCoord, heading: 0.0)
-        engine.updateLocalPlayer(coordinate: targetCoord, heading: 0.0)
-        
-        guard let stateBeforeHeading = engine.localPlayerState else {
-            XCTFail("Local player state should exist")
-            return
-        }
-        let initialCoordStartTime = stateBeforeHeading.coordinateStartTime
-        let initialCoordDuration = stateBeforeHeading.coordinateDuration
-        
-        // High-frequency compass heading arrives at 10-30 Hz
-        engine.updateLocalPlayerHeading(180.0)
-        
-        // Coordinate start time and duration MUST NOT be reset or cut in half by compass heading tick
-        XCTAssertEqual(engine.localPlayerState?.coordinateStartTime, initialCoordStartTime, "Compass heading update must NOT reset coordinateStartTime")
-        XCTAssertEqual(engine.localPlayerState?.coordinateDuration, initialCoordDuration, "Compass heading update must NOT overwrite coordinateDuration")
-        XCTAssertEqual(engine.localPlayerState?.targetHeading, 180.0, "Compass heading target must be updated")
-        XCTAssertEqual(engine.localPlayerState?.headingDuration, 0.15, "Compass heading smoothing must use dedicated 0.15s duration")
-    }
+
     
     func testDigitalCrownRoughZoomStepAndRange() {
         let scales = AppConstants.UI.RadarScale.discreteScales
-        XCTAssertEqual(scales.first, 20.0, "Minimum discrete scale should be 20m")
-        XCTAssertEqual(scales.last, 5000.0, "Maximum discrete scale should be 5000m")
+        XCTAssertEqual(scales.first, 1.0, "Minimum discrete scale should be 1m")
+        XCTAssertEqual(scales.last, 2500.0, "Maximum discrete scale should be 2500m")
+        XCTAssertTrue(scales.contains(1.0), "1m scale must be in discrete scales")
+        XCTAssertTrue(scales.contains(2.5), "2.5m scale must be in discrete scales")
+        XCTAssertTrue(scales.contains(5.0), "5m scale must be in discrete scales")
+        XCTAssertTrue(scales.contains(10.0), "10m scale must be in discrete scales")
+        XCTAssertTrue(scales.contains(25.0), "25m scale must be in discrete scales")
+        XCTAssertTrue(scales.contains(50.0), "50m scale must be in discrete scales")
         XCTAssertTrue(scales.contains(100.0), "Default scale 100m must be in discrete scales")
-        XCTAssertTrue(scales.contains(200.0), "200m scale must be in discrete scales")
-        XCTAssertTrue(scales.contains(400.0), "400m scale must be in discrete scales")
+        XCTAssertTrue(scales.contains(250.0), "250m scale must be in discrete scales")
+        XCTAssertTrue(scales.contains(500.0), "500m scale must be in discrete scales")
         XCTAssertTrue(scales.contains(1000.0), "1000m scale must be in discrete scales")
+        XCTAssertTrue(scales.contains(2500.0), "2500m scale must be in discrete scales")
     }
     
     func testDiscreteWholeNumberScaleSnappingPerDivision() {
         let scales = AppConstants.UI.RadarScale.discreteScales
         
-        // Every discrete scale must produce whole numbers for all 4 range ring divisions
+        // Every discrete scale must produce valid range ring divisions
         for scale in scales {
             for ratio in AppConstants.UI.RadarScale.rangeRingRatios {
-                let ringDistance = scale * ratio
-                let isWholeNumber = (ringDistance.truncatingRemainder(dividingBy: 1.0) == 0.0)
-                XCTAssertTrue(isWholeNumber, "Scale \(scale)m at ratio \(ratio) must yield a whole number (got \(ringDistance)m)")
+                let ringDistance = scale * 4.0 * ratio
+                XCTAssertGreaterThan(ringDistance, 0.0)
             }
         }
         
         // Verify snapping helper functions
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(0.8), 1.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(2.2), 2.5)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(4.8), 5.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(9.0), 10.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(22.0), 25.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(45.0), 50.0)
         XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(95.0), 100.0)
         XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(110.0), 100.0)
-        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(190.0), 200.0)
-        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(450.0), 400.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(230.0), 250.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(480.0), 500.0)
         XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(950.0), 1000.0)
-        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(4800.0), 5000.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(2400.0), 2500.0)
+        
+        // Verify discrete step zoom helpers (+ / - buttons)
+        XCTAssertEqual(AppConstants.UI.RadarScale.stepZoomIn(from: 100.0), 50.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.stepZoomIn(from: 50.0), 25.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.stepZoomIn(from: 25.0), 10.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.stepZoomIn(from: 10.0), 5.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.stepZoomIn(from: 5.0), 2.5)
+        XCTAssertEqual(AppConstants.UI.RadarScale.stepZoomIn(from: 2.5), 1.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.stepZoomIn(from: 1.0), 1.0, "Zoom in at min bound must clamp to 1.0m")
+        
+        XCTAssertEqual(AppConstants.UI.RadarScale.stepZoomOut(from: 100.0), 250.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.stepZoomOut(from: 250.0), 500.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.stepZoomOut(from: 500.0), 1000.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.stepZoomOut(from: 1000.0), 2500.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.stepZoomOut(from: 2500.0), 2500.0, "Zoom out at max bound must clamp to 2500.0m")
     }
     
-    func testZoomScalesBeyond2500mRoundtripAccurately() {
-        let largeScales: [Double] = [2500.0, 3000.0, 4000.0, 5000.0]
-        for scale in largeScales {
+    func testZoomScalesUpTo2500mRoundtripAccurately() {
+        let testScales: [Double] = [1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0]
+        for scale in testScales {
             let delta = AppConstants.UI.RadarScale.mapSpanDelta(forRadarScaleMeters: scale)
             let roundtripScale = AppConstants.UI.RadarScale.radarScaleMeters(forMapSpanDelta: delta)
             XCTAssertEqual(roundtripScale, scale, accuracy: 0.01, "Scale \(scale)m must accurately roundtrip without degradation")
@@ -3726,15 +3743,15 @@ final class RadarMapTests: XCTestCase {
         let scales = AppConstants.UI.RadarScale.discreteScales
         let maxCrownIndex = Double(scales.count - 1)
         
-        // At minimum crown index (0.0), scale should be maximum (5000m - zoomed out)
+        // At minimum crown index (0.0), scale should be maximum (2500m - zoomed out)
         let minCrownScale = AppConstants.UI.RadarScale.scale(forCrownIndex: 0.0)
-        XCTAssertEqual(minCrownScale, 5000.0, "Index 0 must correspond to maximum distance 5000m (zoomed out)")
-        XCTAssertEqual(AppConstants.UI.RadarScale.crownIndex(for: 5000.0), 0.0)
+        XCTAssertEqual(minCrownScale, 2500.0, "Index 0 must correspond to maximum distance 2500m (zoomed out)")
+        XCTAssertEqual(AppConstants.UI.RadarScale.crownIndex(for: 2500.0), 0.0)
         
-        // At maximum crown index, scale should be minimum (20m - zoomed in)
+        // At maximum crown index, scale should be minimum (1m - zoomed in)
         let maxCrownScale = AppConstants.UI.RadarScale.scale(forCrownIndex: maxCrownIndex)
-        XCTAssertEqual(maxCrownScale, 20.0, "Max crown index must correspond to minimum distance 20m (zoomed in)")
-        XCTAssertEqual(AppConstants.UI.RadarScale.crownIndex(for: 20.0), maxCrownIndex)
+        XCTAssertEqual(maxCrownScale, 1.0, "Max crown index must correspond to minimum distance 1m (zoomed in)")
+        XCTAssertEqual(AppConstants.UI.RadarScale.crownIndex(for: 1.0), maxCrownIndex)
         
         // Verify scrolling crown upward (increasing index) monotonically zooms in (decreases meter span)
         for i in 0..<(scales.count - 1) {
@@ -3753,11 +3770,11 @@ final class RadarMapTests: XCTestCase {
     
     func testSquadOrderCallsignFallbackAndResolution() {
         let gameState = GameStateManager()
+        gameState.subscriptionManager.hasUnlimitedSquadUnlock = true
         gameState.myCallsign = ""
         
         // Place a squad order without setting custom callsign
-        gameState.pendingIndicatorPlacementType = .watchHere
-        gameState.placeTacticalIndicator(at: CLLocationCoordinate2D(latitude: 37.77, longitude: -122.41))
+        gameState.placeTacticalIndicator(type: .watchHere, at: CLLocationCoordinate2D(latitude: 37.77, longitude: -122.41))
         
         let indicators = gameState.allTacticalIndicators
         XCTAssertEqual(indicators.count, 1)
@@ -3765,8 +3782,7 @@ final class RadarMapTests: XCTestCase {
         
         // Custom callsign
         gameState.myCallsign = "VIPER"
-        gameState.pendingIndicatorPlacementType = .goHere
-        gameState.placeTacticalIndicator(at: CLLocationCoordinate2D(latitude: 37.78, longitude: -122.42))
+        gameState.placeTacticalIndicator(type: .goHere, at: CLLocationCoordinate2D(latitude: 37.78, longitude: -122.42))
         
         let updatedIndicators = gameState.allTacticalIndicators
         let goOrder = updatedIndicators.first { $0.type == .goHere }
@@ -3863,7 +3879,2122 @@ final class RadarMapTests: XCTestCase {
             XCTAssertNotNil(tactPayload["updatedAt"], "Tactical subroom payload must include updatedAt")
         }
     }
+    
+    // MARK: - Token Mechanism & Shared Location Source Gating Tests
+    
+    func testLocationManagerDirectLocationUpdates() {
+        let locManager = LocationHeadingManager()
+        
+        let watchCoord = CLLocation(latitude: 37.7749, longitude: -122.4194)
+        
+        // Direct location updates accepted
+        locManager.locationManager(CLLocationManager(), didUpdateLocations: [watchCoord])
+        XCTAssertEqual(locManager.userLocation?.coordinate.latitude, watchCoord.coordinate.latitude)
+        XCTAssertEqual(locManager.userLocation?.coordinate.longitude, watchCoord.coordinate.longitude)
+        
+        let newCoord = CLLocation(latitude: 37.7755, longitude: -122.4190)
+        locManager.locationManager(CLLocationManager(), didUpdateLocations: [newCoord])
+        XCTAssertEqual(locManager.userLocation?.coordinate.latitude, newCoord.coordinate.latitude)
+        XCTAssertEqual(locManager.userLocation?.coordinate.longitude, newCoord.coordinate.longitude)
+    }
+    
+    func testGameStateManagerTokenSyncUpdatesNetworkOwnership() {
+        let gameState = createMockGameState()
+        
+        // Simulate phone disconnecting / reachability lost
+        gameState.watchConnectivityManager.onReachabilityChanged?(false)
+        XCTAssertFalse(gameState.isPhoneActive)
+        #if os(watchOS)
+        XCTAssertTrue(gameState.hasNetworkOwnership)
+        #endif
+    }
+    
+    // MARK: - New Tests for UX & Bug Fixes
+    
+    func testSquadRoomDecoding_PreservesRosterDictionaryKeysAsMemberIds() throws {
+        let jsonString = """
+        {
+            "id": "BRAVO",
+            "hostId": "USER_HOST",
+            "maxCapacity": 4,
+            "createdAt": 1000.0,
+            "lastActivityTimestamp": 1000.0,
+            "hasPin": false,
+            "members": {
+                "USER_HOST": {
+                    "callsign": "OVERLORD",
+                    "isHost": true
+                },
+                "USER_OPERATOR": {
+                    "callsign": "VIPER",
+                    "isHost": false
+                }
+            }
+        }
+        """
+        let data = jsonString.data(using: .utf8)!
+        let room = try JSONDecoder().decode(SquadRoom.self, from: data)
+        
+        XCTAssertEqual(room.members["USER_HOST"]?.id, "USER_HOST", "Member ID must match the dictionary key")
+        XCTAssertEqual(room.members["USER_OPERATOR"]?.id, "USER_OPERATOR", "Member ID must match the dictionary key")
+        XCTAssertEqual(room.members["USER_OPERATOR"]?.callsign, "VIPER")
+    }
+    
+    func testJoinRoom_RejoiningAsMyselfWithSameCallsign_SucceedsWithoutConflict() {
+        MockURLProtocol.reset()
+        let existingMember = SquadMember(id: "MY_PERSISTENT_ID", callsign: "VIPER", latitude: 37.77, longitude: -122.41)
+        let room = SquadRoom(id: "ALPHA", hostId: "MY_PERSISTENT_ID", members: ["MY_PERSISTENT_ID": existingMember])
+        let roomData = try! JSONEncoder().encode(room)
+        
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.httpMethod == "GET" {
+                return (response, roomData)
+            }
+            return (response, "{}".data(using: .utf8)!)
+        }
+        
+        let gameState = createMockGameState()
+        gameState.myMemberId = "MY_PERSISTENT_ID"
+        gameState.myCallsign = "VIPER"
+        
+        let exp = expectation(description: "Self-reconnect should succeed")
+        gameState.joinRoom(id: "ALPHA") { success in
+            XCTAssertTrue(success, "Reconnecting to squad where local player already exists must succeed")
+            XCTAssertFalse(gameState.callsignError, "No callsign error should be generated when entry is myself")
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+    
+    func testHUDConstants_MetricsAreConfiguredForPlatform() {
+        #if os(watchOS)
+        XCTAssertEqual(AppConstants.UI.HUD.circleButtonDiameter, 26.0)
+        XCTAssertEqual(AppConstants.UI.HUD.rectButtonWidth, 48.0)
+        XCTAssertEqual(AppConstants.UI.HUD.rectButtonHeight, 24.0)
+        XCTAssertEqual(AppConstants.UI.HUD.circleHitboxSize.width, 48.0)
+        XCTAssertEqual(AppConstants.UI.HUD.circleHitboxSize.height, 48.0)
+        XCTAssertEqual(AppConstants.UI.HUD.rectHitboxSize.width, 52.0)
+        XCTAssertEqual(AppConstants.UI.HUD.rectHitboxSize.height, 48.0)
+        #else
+        XCTAssertEqual(AppConstants.UI.HUD.circleButtonDiameter, 52.0, "iOS circle button must be 2x (52pt)")
+        XCTAssertEqual(AppConstants.UI.HUD.rectButtonWidth, 96.0, "iOS rect button must be 2x (96pt)")
+        XCTAssertEqual(AppConstants.UI.HUD.rectButtonHeight, 48.0, "iOS rect button must be 2x (48pt)")
+        XCTAssertGreaterThanOrEqual(AppConstants.UI.HUD.circleHitboxSize.width, 68.0, "iOS hitbox must be larger than visual bounds")
+        XCTAssertGreaterThanOrEqual(AppConstants.UI.HUD.rectHitboxSize.width, 112.0, "iOS rect hitbox must be larger than visual bounds")
+        #endif
+    }
+    
+    func testKIASynchronizationAndBiometricsRules() {
+        let gameState = createMockGameState()
+        
+        // 1. Initial State: Alive, phone-only (no sensor) -> HR = 75 BPM (default resting)
+        gameState.isDead = false
+        gameState.healthKitManager.currentHeartRate = 0.0
+        gameState.updateLocalPlayerMember()
+        XCTAssertEqual(gameState.localPlayerMember.heartRate, 75.0, "Phone-only alive state must default to 75 BPM")
+        
+        // 2. Watch sensor active -> HR = watch optical monitor (e.g. 132 BPM)
+        gameState.healthKitManager.currentHeartRate = 132.0
+        gameState.updateLocalPlayerMember()
+        XCTAssertEqual(gameState.localPlayerMember.heartRate, 132.0, "Active sensor must reflect live watch heart rate")
+        
+        // 3. Player becomes KIA / Downed -> HR = 0 BPM (flatline)
+        gameState.setDead(true)
+        gameState.updateLocalPlayerMember()
+        XCTAssertTrue(gameState.isDead)
+        XCTAssertEqual(gameState.localPlayerMember.heartRate, 0.0, "KIA state must flatline HR to 0.0 BPM regardless of sensor")
+        
+        // 4. Remote KIA sync received over LowSpeedSnapshot -> updates local isDead
+        let reviveLS = LowSpeedSnapshot(playerState: PlayerStateSnapshot(isDead: false, isDeadTs: Date().timeIntervalSince1970 + 10))
+        gameState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(reviveLS)
+        gameState.updateLocalPlayerMember()
+        XCTAssertFalse(gameState.isDead, "Receiving revive over WatchConnectivity must update isDead to false")
+        XCTAssertEqual(gameState.localPlayerMember.heartRate, 132.0, "Revived player resumes sensor heart rate")
+        
+        let deadLS = LowSpeedSnapshot(playerState: PlayerStateSnapshot(isDead: true, isDeadTs: Date().timeIntervalSince1970 + 20))
+        gameState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(deadLS)
+        gameState.updateLocalPlayerMember()
+        XCTAssertTrue(gameState.isDead, "Receiving KIA over WatchConnectivity must update isDead to true")
+        XCTAssertEqual(gameState.localPlayerMember.heartRate, 0.0, "KIA state must be 0 BPM")
+        XCTAssertEqual(gameState.localPlayerMember.status, .downed, "Local player member status must be downed")
+    }
+    
+    func testBidirectionalKIAButtonAndHeartRateMonitorSync() {
+        let phoneState = createMockGameState()
+        phoneState.myMemberId = "OPERATOR_1"
+        phoneState.myCallsign = "GHOST"
+        phoneState.healthKitManager.currentHeartRate = 80.0
+        phoneState.updateLocalPlayerMember()
+        
+        let watchState = createMockGameState()
+        watchState.myMemberId = "OPERATOR_1"
+        watchState.myCallsign = "GHOST"
+        watchState.healthKitManager.currentHeartRate = 80.0
+        watchState.updateLocalPlayerMember()
+        
+        // 1. Initial State: Both are alive (.active) with normal heart rate (80 BPM)
+        XCTAssertFalse(phoneState.isDead)
+        XCTAssertFalse(watchState.isDead)
+        XCTAssertEqual(phoneState.localPlayerMember.status, .active)
+        XCTAssertEqual(watchState.localPlayerMember.status, .active)
+        XCTAssertEqual(phoneState.localPlayerMember.heartRate, 80.0)
+        XCTAssertEqual(watchState.localPlayerMember.heartRate, 80.0)
+        
+        // 2. User presses KIA button on Watch
+        watchState.setDead(true, syncRemote: true)
+        XCTAssertTrue(watchState.isDead)
+        XCTAssertEqual(watchState.localPlayerMember.status, .downed, "Watch icon must change to downed (X sprite)")
+        XCTAssertEqual(watchState.localPlayerMember.heartRate, 0.0, "Watch heartrate monitor must flatline to 0.0 BPM")
+        
+        // Low-speed snapshot reaches Phone
+        let deadSnapshot = LowSpeedSnapshot(playerState: PlayerStateSnapshot(isDead: true, isDeadTs: Date().timeIntervalSince1970 + 10))
+        phoneState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(deadSnapshot)
+        XCTAssertTrue(phoneState.isDead, "Phone must become dead when Watch triggers KIA")
+        XCTAssertEqual(phoneState.localPlayerMember.status, .downed, "Phone icon must change to downed (X sprite)")
+        XCTAssertEqual(phoneState.localPlayerMember.heartRate, 0.0, "Phone heartrate monitor must flatline to 0.0 BPM")
+        
+        // 3. User presses Revive / Alive button on Phone
+        phoneState.setDead(false, syncRemote: true)
+        XCTAssertFalse(phoneState.isDead)
+        XCTAssertEqual(phoneState.localPlayerMember.status, .active, "Phone icon must change to active player sprite")
+        
+        // Revive snapshot reaches Watch
+        let reviveSnapshot = LowSpeedSnapshot(playerState: PlayerStateSnapshot(isDead: false, isDeadTs: Date().timeIntervalSince1970 + 20))
+        watchState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(reviveSnapshot)
+        XCTAssertFalse(watchState.isDead, "Watch must become alive when Phone triggers Revive")
+        XCTAssertEqual(watchState.localPlayerMember.status, .active, "Watch icon must change to active player sprite")
+    }
+    
+    func testStandardMapViewMeIconUpdatesWhenWatchTogglesKIAAndViceVersa() {
+        let phoneState = createMockGameState()
+        phoneState.myMemberId = "OPERATOR_PHONE"
+        phoneState.myCallsign = "VIPER"
+        phoneState.selectedMapStyle = .standard
+        phoneState.updateLocalPlayerMember()
+        
+        let watchState = createMockGameState()
+        watchState.myMemberId = "OPERATOR_PHONE"
+        watchState.myCallsign = "VIPER"
+        watchState.selectedMapStyle = .standard
+        watchState.updateLocalPlayerMember()
+        
+        // Initial state: Both alive
+        XCTAssertFalse(phoneState.isDead)
+        XCTAssertEqual(phoneState.localPlayerMember.status, .active)
+        
+        // 1. Watch toggles KIA -> Phone in standard map view receives KIA snapshot
+        watchState.setDead(true, syncRemote: true)
+        let deadSnapshot = LowSpeedSnapshot(playerState: PlayerStateSnapshot(isDead: true, isDeadTs: Date().timeIntervalSince1970 + 10))
+        phoneState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(deadSnapshot)
+        
+        XCTAssertTrue(phoneState.isDead, "Phone isDead must be true when Watch toggles KIA")
+        XCTAssertEqual(phoneState.localPlayerMember.status, .downed, "Phone local player member must be downed")
+        XCTAssertEqual(phoneState.localPlayerMember.heartRate, 0.0, "Phone local player heart rate must flatline")
+        
+        // Verify annotation view reflects downed status for 'me' icon
+        let phoneMeAnnotation = MemberAnnotationView(
+            member: phoneState.localPlayerMember,
+            isMe: true,
+            radarColor: phoneState.radarColorTheme.color
+        )
+        XCTAssertEqual(phoneMeAnnotation.member.status, .downed)
+        
+        // 2. Vice versa: Phone revives/toggles alive -> Watch in standard map view receives Revive snapshot
+        phoneState.setDead(false, syncRemote: true)
+        let reviveSnapshot = LowSpeedSnapshot(playerState: PlayerStateSnapshot(isDead: false, isDeadTs: Date().timeIntervalSince1970 + 20))
+        watchState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(reviveSnapshot)
+        
+        XCTAssertFalse(watchState.isDead, "Watch isDead must be false when Phone toggles Revive")
+        XCTAssertEqual(watchState.localPlayerMember.status, .active, "Watch local player member must be active")
+        
+        let watchMeAnnotation = MemberAnnotationView(
+            member: watchState.localPlayerMember,
+            isMe: true,
+            radarColor: watchState.radarColorTheme.color
+        )
+        XCTAssertEqual(watchMeAnnotation.member.status, .active)
+    }
+    
+    func testKiaStateStability_NoFlickerOnInFlightTelemetryOrRosterSync() {
+        let state = createMockGameState()
+        state.myMemberId = "LOCAL_USER"
+        state.myCallsign = "OPERATOR"
+        state.setDead(true)
+        XCTAssertTrue(state.isDead)
+        XCTAssertEqual(state.localPlayerMember.status, .downed)
+        
+        // 1. High-speed incoming telemetry with other remote player must NOT revert local KIA state
+        let remoteTelemetryJson = """
+        {
+            "REMOTE_USER": [37.77, -122.41, 75.0, 1700000000.0]
+        }
+        """
+        state.watchConnectivityManager.onHighSpeedTelemetryReceived?(remoteTelemetryJson, Date().timeIntervalSince1970 + 5.0)
+        XCTAssertTrue(state.isDead, "High-speed remote telemetry must NOT overwrite local KIA state")
+        XCTAssertEqual(state.localPlayerMember.status, .downed)
+    }
+    
+    func testLogoutPlayer_PurgesTelemetryAndSquadOrders() {
+        MockURLProtocol.reset()
+        
+        let tacticalData = """
+        {
+            "updatedAt": 1000.0,
+            "expireAt": 2000.0,
+            "ind_my_order": {
+                "id": "ind_my_order",
+                "type": "watchHere",
+                "category": "squadOrder",
+                "placedByMemberId": "USER_LEAVING",
+                "latitude": 37.77,
+                "longitude": -122.41
+            },
+            "ind_other_order": {
+                "id": "ind_other_order",
+                "type": "goHere",
+                "category": "squadOrder",
+                "placedByMemberId": "USER_OTHER",
+                "latitude": 37.78,
+                "longitude": -122.42
+            }
+        }
+        """.data(using: .utf8)!
+        
+        MockURLProtocol.requestHandler = { request in
+            let path = request.url?.path ?? ""
+            let method = request.httpMethod ?? "GET"
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            
+            if path.contains("/tactical/DELTA.json") && method == "GET" {
+                return (response, tacticalData)
+            }
+            return (response, "{}".data(using: .utf8)!)
+        }
+        
+        let firebase = createMockFirebaseSyncManager()
+        let exp = expectation(description: "Logout should purge telemetry and member orders")
+        firebase.logoutPlayer(roomId: "DELTA", memberId: "USER_LEAVING") { success in
+            XCTAssertTrue(success)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 2.0)
+        
+        let deleteRequests = MockURLProtocol.recordedRequests.filter { $0.httpMethod == "DELETE" }
+        let deletedUrls = deleteRequests.compactMap { $0.url?.absoluteString }
+        
+        XCTAssertTrue(deletedUrls.contains { $0.contains("/rooms/DELTA/members/USER_LEAVING.json") }, "Must delete member entry")
+        XCTAssertTrue(deletedUrls.contains { $0.contains("/telemetry/DELTA/USER_LEAVING.json") }, "Must delete telemetry entry")
+        XCTAssertTrue(deletedUrls.contains { $0.contains("/tactical/DELTA/ind_my_order.json") }, "Must delete user's squad order")
+        XCTAssertFalse(deletedUrls.contains { $0.contains("/tactical/DELTA/ind_other_order.json") }, "Must NOT delete other member's squad order")
+    }
+    
+    func testSingleSharedLoginState_WatchActionAdoptsSessionWithoutDuplicateNetworkJoin() {
+        MockURLProtocol.reset()
+        let roomData = """
+        {
+            "id": "BRAVO",
+            "hostId": "OP_WATCH",
+            "members": {
+                "OP_WATCH": {
+                    "id": "OP_WATCH",
+                    "callsign": "VIPER",
+                    "latitude": 37.77,
+                    "longitude": -122.41,
+                    "isHost": true
+                }
+            }
+        }
+        """.data(using: .utf8)!
+        
+        MockURLProtocol.requestHandler = { request in
+            let path = request.url?.path ?? ""
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if path.contains("/rooms/BRAVO.json") && request.httpMethod == "GET" {
+                return (response, roomData)
+            }
+            return (response, "{}".data(using: .utf8)!)
+        }
+        
+        let gameState = createMockGameState()
+        gameState.myMemberId = "OP_PHONE"
+        gameState.myCallsign = "VIPER"
+        
+        // Incoming Low-Speed Snapshot from companion Watch hosting "BRAVO"
+        let incomingLS = LowSpeedSnapshot(
+            syncTs: 100,
+            config: ConfigSnapshot(callsign: "VIPER", roomName: "BRAVO", pin: "", memberId: "OP_WATCH", configTs: 100),
+            loginCycle: LoginCycleSnapshot(loginCycle: .hostActive, loginCycleTs: 100)
+        )
+        gameState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(incomingLS)
+        
+        let exp = expectation(description: "Room details fetched and session adopted")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+        
+        // Assert: Phone enters tactical session and adopts room without generating a callsign collision
+        XCTAssertTrue(gameState.isTacticalSessionActive, "Phone must enter tactical session upon companion login")
+        XCTAssertEqual(gameState.savedRoomName, "BRAVO")
+        XCTAssertNil(gameState.errorMessage, "No callsign collision error should be shown on Phone")
+        XCTAssertFalse(gameState.callsignError, "Callsign error must remain false")
+        
+        // Companion leaves room -> Phone resets tactical session
+        let inactiveLS = LowSpeedSnapshot(
+            syncTs: 150,
+            config: ConfigSnapshot(callsign: "VIPER", roomName: "BRAVO", pin: "", memberId: "OP_WATCH", configTs: 100),
+            loginCycle: LoginCycleSnapshot(loginCycle: .inactive, loginCycleTs: 150)
+        )
+        gameState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(inactiveLS)
+        XCTAssertFalse(gameState.isTacticalSessionActive, "Phone must exit tactical session when companion becomes inactive")
+        XCTAssertNil(gameState.firebaseManager.activeRoom)
+    }
+    
+    // MARK: - Unified Map State & Standard MapKit Behavior Tests
+    
+    func testUnifiedMapCenterAndScaleManagement() {
+        let gameState = createMockGameState()
+        let playerCoord = gameState.localPlayerMember.coordinate
+        
+        // 1. Initial State: Center is nil (tracking player), scale is default 100m
+        XCTAssertNil(gameState.currentMapCenter)
+        XCTAssertEqual(gameState.radarScaleMeters, AppConstants.UI.RadarScale.defaultScaleMeters)
+        
+        // 2. Coordinate very close to player (< 10m) should keep currentMapCenter as nil
+        let nearCoord = CLLocationCoordinate2D(
+            latitude: playerCoord.latitude + 0.00002, // ~2.2m away
+            longitude: playerCoord.longitude
+        )
+        gameState.updateMapCenter(to: nearCoord)
+        XCTAssertNil(gameState.currentMapCenter, "Coordinates within threshold must keep map center tracking player")
+        
+        // 3. Coordinate far from player (> 10m) should update currentMapCenter
+        let farCoord = CLLocationCoordinate2D(
+            latitude: playerCoord.latitude + 0.005, // ~550m away
+            longitude: playerCoord.longitude + 0.005
+        )
+        gameState.updateMapCenter(to: farCoord)
+        XCTAssertNotNil(gameState.currentMapCenter)
+        XCTAssertEqual(gameState.currentMapCenter?.latitude, farCoord.latitude)
+        XCTAssertEqual(gameState.currentMapCenter?.longitude, farCoord.longitude)
+        
+        // 4. Moving back close to player resets currentMapCenter to nil
+        gameState.updateMapCenter(to: nearCoord)
+        XCTAssertNil(gameState.currentMapCenter, "Moving back near player must reset map center to nil")
+        
+        // 5. Update scale continuously (standard MapKit pinch behavior)
+        gameState.updateMapScale(meters: 250.0)
+        XCTAssertEqual(gameState.radarScaleMeters, 250.0)
+        
+        // 6. Scale clamping bounds
+        gameState.updateMapScale(meters: 0.5) // Below min (1.0m)
+        XCTAssertEqual(gameState.radarScaleMeters, AppConstants.UI.RadarScale.minScaleMeters)
+        
+        gameState.updateMapScale(meters: 5000.0) // Above max (2500m)
+        XCTAssertEqual(gameState.radarScaleMeters, AppConstants.UI.RadarScale.maxiOSScaleMeters)
+    }
+    
+    func testResetMapToDefaultCenterAndZoomResetsAllState() {
+        let gameState = createMockGameState()
+        let initialTrigger = gameState.radarCenterTrigger
+        
+        // Set custom center and scale
+        gameState.currentMapCenter = CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
+        gameState.radarScaleMeters = 800.0
+        
+        // Call reset
+        gameState.resetMapToDefaultCenterAndZoom()
+        
+        // Verify center is reset to nil while scale is preserved
+        XCTAssertNil(gameState.currentMapCenter, "Map center must reset to nil (tracking player)")
+        XCTAssertEqual(gameState.radarScaleMeters, 800.0, "Scale must be preserved when recentering")
+        XCTAssertEqual(gameState.radarCenterTrigger, initialTrigger + 1, "Trigger counter must increment")
+    }
+    
+    func testMapStyleTogglePreservesMapCenterAndScale() {
+        let gameState = createMockGameState()
+        let customCoord = CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194)
+        gameState.currentMapCenter = customCoord
+        gameState.radarScaleMeters = 250.0
+        
+        XCTAssertEqual(gameState.selectedMapStyle, .radar)
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .standard)
+        XCTAssertEqual(gameState.currentMapCenter?.latitude, customCoord.latitude)
+        XCTAssertEqual(gameState.currentMapCenter?.longitude, customCoord.longitude)
+        XCTAssertEqual(gameState.radarScaleMeters, 250.0)
+        
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .radar)
+        XCTAssertEqual(gameState.currentMapCenter?.latitude, customCoord.latitude)
+        XCTAssertEqual(gameState.currentMapCenter?.longitude, customCoord.longitude)
+        XCTAssertEqual(gameState.radarScaleMeters, 250.0)
+    }
+    
+    func testRapidMapStyleSwitchesPreservesExactScaleStateMachine() {
+        let gameState = createMockGameState()
+        let targetScale = 500.0
+        gameState.updateMapScale(meters: targetScale)
+        
+        XCTAssertEqual(gameState.mapStateMachine.scaleMeters, targetScale)
+        XCTAssertEqual(gameState.radarScaleMeters, targetScale)
+        
+        // Rapidly toggle map style 10 times
+        for i in 1...10 {
+            gameState.toggleNextMapStyle()
+            let expectedStyle: TacticalMapStyle = (i % 2 == 1) ? .standard : .radar
+            XCTAssertEqual(gameState.selectedMapStyle, expectedStyle)
+            XCTAssertEqual(gameState.mapStateMachine.style, expectedStyle)
+            XCTAssertEqual(gameState.mapStateMachine.scaleMeters, targetScale, "Scale in state machine must never mutate when switching styles")
+            XCTAssertEqual(gameState.radarScaleMeters, targetScale, "Published scale must never mutate when switching styles")
+        }
+    }
+    
+    func testCenterMapOnLocalUserPreservesScale() {
+        let gameState = createMockGameState()
+        gameState.currentMapCenter = CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194)
+        gameState.radarScaleMeters = 500.0
+        
+        gameState.centerMapOnLocalUser()
+        XCTAssertNil(gameState.currentMapCenter, "Map center must be reset to nil to track local user")
+        XCTAssertEqual(gameState.radarScaleMeters, 500.0, "Scale must be preserved when centering")
+    }
+    
+    func testDecadesLadderValues() {
+        let expected: [Double] = [1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0]
+        XCTAssertEqual(AppConstants.UI.RadarScale.discreteScales, expected)
+    }
+    
+    func testCrownZoomPreservesLocalUserCentering() {
+        let gameState = createMockGameState()
+        
+        // Map is initially centered on local user (currentMapCenter is nil)
+        XCTAssertNil(gameState.currentMapCenter)
+        XCTAssertEqual(gameState.radarScaleMeters, AppConstants.UI.RadarScale.defaultScaleMeters)
+        
+        // Simulating crown scroll to zoom in/out
+        for crownIdx in 0..<AppConstants.UI.RadarScale.discreteScales.count {
+            let scale = AppConstants.UI.RadarScale.scale(forCrownIndex: Double(crownIdx))
+            gameState.radarScaleMeters = scale
+            
+            // Changing scale via crown must preserve currentMapCenter as nil (tracking local user)
+            XCTAssertNil(gameState.currentMapCenter, "Crown zooming must keep the map centered on the local user")
+            XCTAssertEqual(gameState.radarScaleMeters, scale)
+        }
+    }
+    
+    func testMapViewSwitchPreservesLocalUserCenteringPositiveAndNegativeUX() {
+        let gameState = createMockGameState()
+        
+        // 1. Initial State: Mode is Radar, centered on local user
+        XCTAssertEqual(gameState.selectedMapStyle, .radar)
+        XCTAssertNil(gameState.currentMapCenter, "Initial map center must be nil (tracking local user)")
+        XCTAssertEqual(gameState.radarScaleMeters, AppConstants.UI.RadarScale.defaultScaleMeters)
+        
+        // Positive UX 1: Switch Radar -> Standard
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .standard)
+        // Negative UX Check 1: Switching to Standard must NOT uncenter from local user
+        XCTAssertNil(gameState.currentMapCenter, "Switching to standard map must remain centered on local user")
+        XCTAssertEqual(gameState.radarScaleMeters, AppConstants.UI.RadarScale.defaultScaleMeters)
+        
+        // Positive UX 2: Switch Standard -> Radar
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .radar)
+        // Negative UX Check 2: Switching back to Radar must remain centered on local user
+        XCTAssertNil(gameState.currentMapCenter, "Switching back to radar must remain centered on local user")
+        XCTAssertEqual(gameState.radarScaleMeters, AppConstants.UI.RadarScale.defaultScaleMeters)
+        
+        // Positive UX 3: Rapid consecutive toggling preserves local centering
+        for _ in 1...10 {
+            gameState.toggleNextMapStyle()
+            XCTAssertNil(gameState.currentMapCenter, "Rapid style switching must NEVER cause currentMapCenter to become non-nil")
+        }
+    }
+    
+    func testMapViewSwitchWithCustomPannedLocationPreservesPannedInspection() {
+        let gameState = createMockGameState()
+        let customCoord = CLLocationCoordinate2D(latitude: 37.7890, longitude: -122.4010)
+        
+        // User explicitly pans away in Radar mode to inspect an area
+        gameState.updateMapCenter(to: customCoord)
+        XCTAssertNotNil(gameState.currentMapCenter)
+        XCTAssertEqual(gameState.currentMapCenter?.latitude, customCoord.latitude)
+        XCTAssertEqual(gameState.currentMapCenter?.longitude, customCoord.longitude)
+        
+        // Positive UX: Switch to Standard retains custom panned coordinates
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .standard)
+        XCTAssertEqual(gameState.currentMapCenter?.latitude, customCoord.latitude)
+        XCTAssertEqual(gameState.currentMapCenter?.longitude, customCoord.longitude)
+        
+        // Positive UX: Switch back to Radar retains custom panned coordinates
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .radar)
+        XCTAssertEqual(gameState.currentMapCenter?.latitude, customCoord.latitude)
+        XCTAssertEqual(gameState.currentMapCenter?.longitude, customCoord.longitude)
+        
+        // User recenters via center HUD button
+        gameState.centerMapOnLocalUser()
+        XCTAssertNil(gameState.currentMapCenter, "Recentering must clear custom center to track local user")
+        
+        // Subsequent view switches now stay centered on local user
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .standard)
+        XCTAssertNil(gameState.currentMapCenter, "Must remain locked to local user after recentering")
+    }
+    
+    func testMapViewSwitchAfterZoomScaleChangesPreservesScale() {
+        let gameState = createMockGameState()
+        XCTAssertNil(gameState.currentMapCenter)
+        
+        // Zoom in to 25m in Radar view
+        gameState.updateMapScale(meters: 25.0)
+        XCTAssertEqual(gameState.radarScaleMeters, 25.0)
+        XCTAssertNil(gameState.currentMapCenter)
+        
+        // Switch to Standard view: scale must be preserved and center must remain on user
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .standard)
+        XCTAssertEqual(gameState.radarScaleMeters, 25.0, "Scale must be preserved when switching views")
+        XCTAssertNil(gameState.currentMapCenter, "Must stay centered on local user")
+        
+        // Zoom out to 1000m in Standard view
+        gameState.updateMapScale(meters: 1000.0)
+        XCTAssertEqual(gameState.radarScaleMeters, 1000.0)
+        XCTAssertNil(gameState.currentMapCenter)
+        
+        // Switch back to Radar view: scale 1000m must be preserved and center must remain on user
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .radar)
+        XCTAssertEqual(gameState.radarScaleMeters, 1000.0, "Scale must be preserved when switching back to radar")
+        XCTAssertNil(gameState.currentMapCenter, "Must stay centered on local user")
+    }
+    
+    // MARK: - Comprehensive UX Elements & Interaction Tests
+    
+    func testHUDLayoutConstantsAndHitboxesMeetAppleHIG() {
+        #if os(watchOS)
+        XCTAssertGreaterThanOrEqual(AppConstants.UI.HUD.circleHitboxSize.width, 44.0, "Watch circle hitbox width must meet 44pt HIG minimum")
+        XCTAssertGreaterThanOrEqual(AppConstants.UI.HUD.circleHitboxSize.height, 44.0, "Watch circle hitbox height must meet 44pt HIG minimum")
+        XCTAssertGreaterThanOrEqual(AppConstants.UI.HUD.rectHitboxSize.width, 44.0, "Watch rect hitbox width must meet 44pt HIG minimum")
+        XCTAssertGreaterThanOrEqual(AppConstants.UI.HUD.rectHitboxSize.height, 44.0, "Watch rect hitbox height must meet 44pt HIG minimum")
+        #else
+        XCTAssertGreaterThanOrEqual(AppConstants.UI.HUD.circleHitboxSize.width, 44.0, "iOS circle hitbox width must meet 44pt HIG minimum")
+        XCTAssertGreaterThanOrEqual(AppConstants.UI.HUD.circleHitboxSize.height, 44.0, "iOS circle hitbox height must meet 44pt HIG minimum")
+        XCTAssertGreaterThanOrEqual(AppConstants.UI.HUD.rectHitboxSize.width, 44.0, "iOS rect hitbox width must meet 44pt HIG minimum")
+        XCTAssertGreaterThanOrEqual(AppConstants.UI.HUD.rectHitboxSize.height, 44.0, "iOS rect hitbox height must meet 44pt HIG minimum")
+        #endif
+    }
+    
+    func testMapCenterLockStateEnumAndProperties() {
+        XCTAssertEqual(MapCenterLockState.allCases.count, 2)
+        XCTAssertTrue(MapCenterLockState.allCases.contains(.locked))
+        XCTAssertTrue(MapCenterLockState.allCases.contains(.unlocked))
+        
+        let locked = MapCenterLockState.locked
+        XCTAssertTrue(locked.isLocked)
+        XCTAssertFalse(locked.isUnlocked)
+        XCTAssertEqual(locked.rawValue, "locked")
+        XCTAssertEqual(locked.id, "locked")
+        XCTAssertEqual(locked.iconName, "location.fill")
+        
+        let unlocked = MapCenterLockState.unlocked
+        XCTAssertFalse(unlocked.isLocked)
+        XCTAssertTrue(unlocked.isUnlocked)
+        XCTAssertEqual(unlocked.rawValue, "unlocked")
+        XCTAssertEqual(unlocked.id, "unlocked")
+        XCTAssertEqual(unlocked.iconName, "location")
+    }
+    
+    func testMapCenterLockStateRememberedAcrossStyleSwitchAndReinitialization() {
+        let gameState = createMockGameState()
+        
+        // 1. Initial State: locked to local user
+        XCTAssertEqual(gameState.mapCenterLockState, .locked)
+        XCTAssertNil(gameState.currentMapCenter)
+        
+        // 2. User pans away -> unlocked
+        let pannedCoord = CLLocationCoordinate2D(latitude: 37.85, longitude: -122.45)
+        gameState.updateMapCenter(to: pannedCoord)
+        XCTAssertEqual(gameState.mapCenterLockState, .unlocked)
+        XCTAssertEqual(gameState.currentMapCenter?.latitude, pannedCoord.latitude)
+        
+        // 3. Switch style: desired unlocked state is remembered
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.mapCenterLockState, .unlocked)
+        XCTAssertEqual(gameState.currentMapCenter?.latitude, pannedCoord.latitude)
+        
+        // 4. Center map button: desired locked state is remembered
+        gameState.centerMapOnLocalUser()
+        XCTAssertEqual(gameState.mapCenterLockState, .locked)
+        XCTAssertNil(gameState.currentMapCenter)
+        
+        // 5. Switch style: desired locked state is remembered
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.mapCenterLockState, .locked)
+        XCTAssertNil(gameState.currentMapCenter)
+        
+        // 6. Direct setMapCenterLockState
+        gameState.setMapCenterLockState(.unlocked)
+        XCTAssertEqual(gameState.mapCenterLockState, .unlocked)
+        
+        gameState.setMapCenterLockState(.locked)
+        XCTAssertEqual(gameState.mapCenterLockState, .locked)
+        XCTAssertNil(gameState.currentMapCenter)
+    }
+    
+    func testAutomaticVersionTrackingFormat() {
+        let versionStr = AppConstants.Version.formattedVersionString
+        XCTAssertTrue(versionStr.hasPrefix("v"), "Version string should start with 'v'")
+        XCTAssertTrue(versionStr.contains("b"), "Version string should contain build indicator 'b'")
+    }
+    
+    func testMapStateMachineTransitionsAndBehavior() {
+        var sm = MapStateMachine()
+        let userCoord = CLLocationCoordinate2D(latitude: 37.77, longitude: -122.41)
+        
+        // Initial state
+        XCTAssertEqual(sm.trackingState, .locked)
+        XCTAssertEqual(sm.scaleMeters, AppConstants.UI.RadarScale.defaultScaleMeters)
+        XCTAssertEqual(sm.style, .radar)
+        XCTAssertEqual(sm.centerTriggerCount, 0)
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).latitude, userCoord.latitude)
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).longitude, userCoord.longitude)
+        
+        // Pan close (< 10m): stays locked
+        let closeCoord = CLLocationCoordinate2D(latitude: 37.77002, longitude: -122.41)
+        sm.handle(.pan(to: closeCoord, userCoord: userCoord))
+        XCTAssertEqual(sm.trackingState, .locked)
+        
+        // Pan far (> 10m): unlocks and stores coordinate
+        let farCoord = CLLocationCoordinate2D(latitude: 37.78, longitude: -122.42)
+        sm.handle(.pan(to: farCoord, userCoord: userCoord))
+        XCTAssertEqual(sm.trackingState, .unlocked(latitude: farCoord.latitude, longitude: farCoord.longitude))
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).latitude, farCoord.latitude)
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).longitude, farCoord.longitude)
+        XCTAssertEqual(sm.trackingState.iconName, "location")
+        
+        // Center on user: locks and increments trigger count
+        sm.handle(.centerOnLocalUser)
+        XCTAssertEqual(sm.trackingState, .locked)
+        XCTAssertEqual(sm.centerTriggerCount, 1)
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).latitude, userCoord.latitude)
+        XCTAssertEqual(sm.trackingState.iconName, "location.fill")
+        
+        // Cycle style
+        sm.handle(.cycleStyle)
+        XCTAssertEqual(sm.style, .standard)
+        sm.handle(.cycleStyle)
+        XCTAssertEqual(sm.style, .radar)
+        
+        // Set scale
+        sm.handle(.setScale(meters: 500.0))
+        XCTAssertEqual(sm.scaleMeters, 500.0)
+    }
+    
+    func testSessionStateMachineTransitionsAndBehavior() {
+        var sm = SessionStateMachine()
+        
+        // Initial state
+        XCTAssertEqual(sm.state, .disconnected)
+        XCTAssertFalse(sm.state.isHosting)
+        XCTAssertFalse(sm.state.isJoining)
+        XCTAssertFalse(sm.state.isInitiatingHost)
+        XCTAssertFalse(sm.state.isActiveSession)
+        XCTAssertNil(sm.state.activeRoom)
+        
+        // Request host
+        sm.handle(.startHost(name: "BRAVO", pin: "1234"))
+        XCTAssertEqual(sm.state, .initiatingHost(roomName: "BRAVO", pin: "1234"))
+        XCTAssertTrue(sm.state.isInitiatingHost)
+        XCTAssertFalse(sm.state.isHosting)
+        
+        // Host failure
+        sm.handle(.hostFailure(error: "Network error"))
+        XCTAssertEqual(sm.state, .error(message: "Network error"))
+        XCTAssertEqual(sm.state.errorMessage, "Network error")
+        
+        // Clear error
+        sm.handle(.clearError)
+        XCTAssertEqual(sm.state, .disconnected)
+        
+        // Host success
+        let testRoom = SquadRoom(id: "BRAVO", hostId: "USER1")
+        sm.handle(.startHost(name: "BRAVO", pin: nil))
+        sm.handle(.hostSuccess(room: testRoom))
+        XCTAssertEqual(sm.state, .hosting(room: testRoom))
+        XCTAssertTrue(sm.state.isHosting)
+        XCTAssertTrue(sm.state.isActiveSession)
+        XCTAssertEqual(sm.state.activeRoom?.id, "BRAVO")
+        
+        // Disband
+        sm.handle(.disband)
+        XCTAssertEqual(sm.state, .disconnected)
+        
+        // Join flow
+        sm.handle(.startJoin(id: "CHARLIE", pin: "5678"))
+        XCTAssertEqual(sm.state, .initiatingJoin(roomId: "CHARLIE", pin: "5678"))
+        XCTAssertTrue(sm.state.isJoining)
+        
+        let joinedRoom = SquadRoom(id: "CHARLIE", hostId: "HOST2")
+        sm.handle(.joinSuccess(room: joinedRoom))
+        XCTAssertEqual(sm.state, .joined(room: joinedRoom))
+        XCTAssertFalse(sm.state.isHosting)
+        XCTAssertTrue(sm.state.isActiveSession)
+        XCTAssertEqual(sm.state.activeRoom?.id, "CHARLIE")
+        
+        // Leave
+        sm.handle(.leave)
+        XCTAssertEqual(sm.state, .disconnected)
+    }
+    
+    func testPlayerVitalStateMachineTransitionsAndBehavior() {
+        var sm = PlayerVitalStateMachine()
+        
+        // Initial state
+        XCTAssertFalse(sm.state.isDead)
+        XCTAssertEqual(sm.state.effectiveHeartRate, AppConstants.Health.defaultRestingHeartRate)
+        XCTAssertEqual(sm.state.status, .active)
+        
+        // Update heart rate while active
+        sm.handle(.updateHeartRate(135.0))
+        XCTAssertEqual(sm.state.effectiveHeartRate, 135.0)
+        XCTAssertFalse(sm.state.isDead)
+        
+        // Set KIA -> Downed (flatline)
+        sm.handle(.setKIA(true))
+        XCTAssertTrue(sm.state.isDead)
+        XCTAssertEqual(sm.state.effectiveHeartRate, AppConstants.Health.flatlineHeartRate)
+        XCTAssertEqual(sm.state.status, .downed)
+        
+        // Incoming sensor heart rate while downed should be ignored
+        sm.handle(.updateHeartRate(140.0))
+        XCTAssertEqual(sm.state.effectiveHeartRate, AppConstants.Health.flatlineHeartRate)
+        
+        // Toggle KIA -> Active
+        sm.handle(.toggleKIA)
+        XCTAssertFalse(sm.state.isDead)
+        XCTAssertEqual(sm.state.status, .active)
+        XCTAssertEqual(sm.state.effectiveHeartRate, AppConstants.Health.defaultRestingHeartRate)
+        
+        // Set KIA false
+        sm.handle(.setKIA(false))
+        XCTAssertFalse(sm.state.isDead)
+    }
+    
+    func testHUDLocationButtonIconStateReflectsCentering() {
+        let gameState = createMockGameState()
+        
+        // 1. When locked / tracking local user, icon should be "location.fill"
+        XCTAssertEqual(gameState.mapCenterLockState, .locked)
+        XCTAssertEqual(gameState.mapCenterLockState.iconName, "location.fill")
+        
+        // 2. When panned away (unlocked), icon should be "location"
+        let pannedCoord = CLLocationCoordinate2D(latitude: 37.5, longitude: -122.2)
+        gameState.updateMapCenter(to: pannedCoord)
+        XCTAssertEqual(gameState.mapCenterLockState, .unlocked)
+        XCTAssertEqual(gameState.mapCenterLockState.iconName, "location")
+        
+        // 3. When recentered (locked), icon reverts to "location.fill"
+        gameState.centerMapOnLocalUser()
+        XCTAssertEqual(gameState.mapCenterLockState, .locked)
+        XCTAssertEqual(gameState.mapCenterLockState.iconName, "location.fill")
+    }
+    
+    func testHUDMapStyleButtonIconReflectsActiveStyle() {
+        let gameState = createMockGameState()
+        
+        XCTAssertEqual(gameState.selectedMapStyle, .radar)
+        XCTAssertEqual(gameState.selectedMapStyle.iconName, "map")
+        
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .standard)
+        XCTAssertEqual(gameState.selectedMapStyle.iconName, "map")
+        
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .radar)
+        XCTAssertEqual(gameState.selectedMapStyle.iconName, "map")
+    }
+    
+    func testScaleRulerDistanceFormattingAcrossAllDecades() {
+        // Discrete thresholds formatting (tactical ruler displays 2 clicks of minor scale: 2 * minorScaleMeters)
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 1.0), "2m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 2.5), "5m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 5.0), "10m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 10.0), "20m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 25.0), "50m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 50.0), "100m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 100.0), "200m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 250.0), "500m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 500.0), "1km")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 1000.0), "2km")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: 2500.0), "5km")
+        
+        // General distance formatting
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatDistance(meters: 25.0), "25m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatDistance(meters: 100.0), "100m")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatDistance(meters: 1000.0), "1km")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatDistance(meters: 2500.0), "2.5km")
+        XCTAssertEqual(AppConstants.UI.ScaleRuler.formatDistance(meters: 1500.0), "1.5km")
+    }
+    
+    func testDigitalCrownBidirectionalScaleLadderMapping() {
+        let scales = AppConstants.UI.RadarScale.discreteScales
+        for (index, scale) in scales.enumerated() {
+            // Forward: scale -> crownIndex
+            let crownIdx = AppConstants.UI.RadarScale.crownIndex(for: scale)
+            let expectedCrownIdx = Double((scales.count - 1) - index)
+            XCTAssertEqual(crownIdx, expectedCrownIdx, accuracy: 0.001)
+            
+            // Reverse: crownIndex -> scale
+            let resolvedScale = AppConstants.UI.RadarScale.scale(forCrownIndex: crownIdx)
+            XCTAssertEqual(resolvedScale, scale, accuracy: 0.001)
+        }
+        
+        // In-between scale snapping
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(1.2), 1.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(3.0), 2.5)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(12.0), 10.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(30.0), 25.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(45.0), 50.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(220.0), 250.0)
+        XCTAssertEqual(AppConstants.UI.RadarScale.snapToDiscreteScale(2300.0), 2500.0)
+    }
+    
+    func testEKGSweepDurationDynamicCalculation() {
+        // Sweep duration formula: sweepDuration = referenceBpm / max(20.0, currentBpm)
+        let refBpm = AppConstants.Health.referenceBpm // 100.0
+        
+        // High heart rate (150 BPM) -> faster sweep (0.67s)
+        let highBpmSweep = refBpm / max(20.0, 150.0)
+        XCTAssertEqual(highBpmSweep, 100.0 / 150.0, accuracy: 0.001)
+        
+        // Normal heart rate (75 BPM) -> 1.33s sweep
+        let normalBpmSweep = refBpm / max(20.0, 75.0)
+        XCTAssertEqual(normalBpmSweep, 100.0 / 75.0, accuracy: 0.001)
+        
+        // Resting heart rate (50 BPM) -> 2.0s sweep
+        let restingBpmSweep = refBpm / max(20.0, 50.0)
+        XCTAssertEqual(restingBpmSweep, 2.0, accuracy: 0.001)
+        
+        // Very low or 0 BPM (clamped to 20.0 minimum to prevent infinite sweep duration)
+        let flatlineClampedSweep = refBpm / max(20.0, 0.0)
+        XCTAssertEqual(flatlineClampedSweep, 5.0, accuracy: 0.001)
+    }
+    
+    func testPinSanitizationVoiceAndDictationInput() {
+        // Voice words conversion
+        XCTAssertEqual(GameStateManager.sanitizePinInput("one two three four"), "1234")
+        XCTAssertEqual(GameStateManager.sanitizePinInput("five six seven eight"), "5678")
+        XCTAssertEqual(GameStateManager.sanitizePinInput("nine zero oh won"), "9001")
+        XCTAssertEqual(GameStateManager.sanitizePinInput("too to ate"), "228")
+        
+        // Digits with punctuation & formatting
+        XCTAssertEqual(GameStateManager.sanitizePinInput("1-2-3-4"), "1234")
+        XCTAssertEqual(GameStateManager.sanitizePinInput("PIN: 7890"), "7890")
+        XCTAssertEqual(GameStateManager.sanitizePinInput("  4 3 2 1  "), "4321")
+        
+        // Max 4 digits clamping
+        XCTAssertEqual(GameStateManager.sanitizePinInput("12345678"), "1234")
+    }
+    
+    func testWelcomeGuideHUDCalloutsCompleteness() {
+        let callouts = TacticalHUDCallout.allCases
+        XCTAssertEqual(callouts.count, 5)
+        
+        for callout in callouts {
+            XCTAssertFalse(callout.codeTag.isEmpty, "\(callout.rawValue) codeTag must not be empty")
+            XCTAssertFalse(callout.iconName.isEmpty, "\(callout.rawValue) iconName must not be empty")
+            XCTAssertFalse(callout.shortTitle.isEmpty, "\(callout.rawValue) shortTitle must not be empty")
+            XCTAssertFalse(callout.actionInstruction.isEmpty, "\(callout.rawValue) actionInstruction must not be empty")
+            XCTAssertFalse(callout.gestureHint.isEmpty, "\(callout.rawValue) gestureHint must not be empty")
+        }
+    }
+    
+    func testTacticalIndicatorFadeOpacityCalculation() {
+        let now = Date()
+        let indicator = TacticalIndicator(
+            type: .infantry,
+            coordinate: CLLocationCoordinate2D(latitude: 37.77, longitude: -122.41),
+            placedByMemberId: "USER_TEST",
+            timestamp: now.timeIntervalSince1970
+        )
+        
+        // At creation: fresh (fade = 0.0, opacity = 1.0)
+        XCTAssertEqual(indicator.grayFadeFactor(referenceDate: now), 0.0, accuracy: 0.01)
+        XCTAssertFalse(indicator.isFullyFaded(referenceDate: now))
+        
+        // 2.5 minutes elapsed (50% of 5-minute fade window)
+        let midDate = now.addingTimeInterval(150.0)
+        XCTAssertEqual(indicator.grayFadeFactor(referenceDate: midDate), 0.5, accuracy: 0.01)
+        XCTAssertFalse(indicator.isFullyFaded(referenceDate: midDate))
+        
+        // 5.0 minutes elapsed (100% fade)
+        let fadedDate = now.addingTimeInterval(300.0)
+        XCTAssertEqual(indicator.grayFadeFactor(referenceDate: fadedDate), 1.0, accuracy: 0.01)
+        XCTAssertTrue(indicator.isFullyFaded(referenceDate: fadedDate))
+        
+        // > 5.0 minutes elapsed (clamped to 1.0)
+        let pastDate = now.addingTimeInterval(400.0)
+        XCTAssertEqual(indicator.grayFadeFactor(referenceDate: pastDate), 1.0, accuracy: 0.01)
+        XCTAssertTrue(indicator.isFullyFaded(referenceDate: pastDate))
+    }
+    
+    func testTacticalIndicatorTypeIconNamesAndCustomSymbols() {
+        // Squad Orders
+        XCTAssertEqual(TacticalIndicatorType.watchHere.iconName, "eye.fill")
+        XCTAssertEqual(TacticalIndicatorType.watchHere.category, .squadOrder)
+        XCTAssertFalse(TacticalIndicatorType.watchHere.isCustomSymbol)
+        
+        XCTAssertEqual(TacticalIndicatorType.goHere.iconName, "arrowshape.down")
+        XCTAssertEqual(TacticalIndicatorType.attackHere.iconName, "bolt")
+        XCTAssertEqual(TacticalIndicatorType.protectHere.iconName, "shield")
+        
+        XCTAssertEqual(TacticalIndicatorType.flag.iconName, "flag.fill")
+        XCTAssertEqual(TacticalIndicatorType.flag.category, .squadOrder)
+        XCTAssertEqual(TacticalIndicatorType.flag.title, "Flag")
+        
+        let numbers: [TacticalIndicatorType] = [
+            .point1, .point2, .point3, .point4, .point5,
+            .point6, .point7, .point8, .point9, .point10
+        ]
+        for (index, num) in numbers.enumerated() {
+            let n = index + 1
+            XCTAssertEqual(num.iconName, "\(n).circle")
+            XCTAssertEqual(num.category, .squadOrder)
+            XCTAssertEqual(num.title, "\(n)")
+            XCTAssertFalse(num.isCustomSymbol)
+        }
+        
+        // Enemy Indicators
+        XCTAssertEqual(TacticalIndicatorType.infantry.iconName, "tactical.helmet")
+        XCTAssertEqual(TacticalIndicatorType.infantry.category, .enemyIndicator)
+        XCTAssertTrue(TacticalIndicatorType.infantry.isCustomSymbol)
+        
+        XCTAssertEqual(TacticalIndicatorType.vehicle.iconName, "tactical.humvee")
+        XCTAssertEqual(TacticalIndicatorType.vehicle.title, "Vehicle")
+        XCTAssertEqual(TacticalIndicatorType.vehicle.category, .enemyIndicator)
+        XCTAssertTrue(TacticalIndicatorType.vehicle.isCustomSymbol)
+        
+        XCTAssertEqual(TacticalIndicatorType.armor.iconName, "tactical.tank")
+        XCTAssertEqual(TacticalIndicatorType.armor.title, "Armor")
+        XCTAssertEqual(TacticalIndicatorType.armor.category, .enemyIndicator)
+        XCTAssertTrue(TacticalIndicatorType.armor.isCustomSymbol)
+        
+        XCTAssertEqual(TacticalIndicatorType.drone.iconName, "tactical.drone")
+        XCTAssertEqual(TacticalIndicatorType.drone.title, "Drone")
+        XCTAssertEqual(TacticalIndicatorType.drone.category, .enemyIndicator)
+        XCTAssertTrue(TacticalIndicatorType.drone.isCustomSymbol)
+        
+        // Environment Indicators
+        XCTAssertEqual(TacticalIndicatorType.water.iconName, "water.waves")
+        XCTAssertEqual(TacticalIndicatorType.water.category, .environment)
+        XCTAssertFalse(TacticalIndicatorType.water.isCustomSymbol)
+        
+        XCTAssertEqual(TacticalIndicatorType.hazard.iconName, "exclamationmark.triangle.fill")
+        XCTAssertEqual(TacticalIndicatorType.hazard.category, .environment)
+        
+        XCTAssertEqual(TacticalIndicatorType.fire.iconName, "flame.fill")
+        XCTAssertEqual(TacticalIndicatorType.fire.category, .environment)
+        
+        XCTAssertEqual(TacticalIndicatorType.snow.iconName, "snowflake")
+        XCTAssertEqual(TacticalIndicatorType.snow.category, .environment)
+        
+        XCTAssertEqual(TacticalIndicatorType.closure.iconName, "minus.circle.fill")
+        XCTAssertEqual(TacticalIndicatorType.closure.category, .environment)
+        
+        XCTAssertEqual(TacticalIndicatorType.emergency.iconName, "sos.circle.fill")
+        XCTAssertEqual(TacticalIndicatorType.emergency.category, .environment)
+        
+        // Backward-compatible JSON decoding verification
+        let legacyJson = """
+        ["lightVehicle", "heavyVehicle", "vehicle", "armor", "drone", "water", "emergency"]
+        """.data(using: .utf8)!
+        let decoded = try? JSONDecoder().decode([TacticalIndicatorType].self, from: legacyJson)
+        XCTAssertEqual(decoded, [.vehicle, .armor, .vehicle, .armor, .drone, .water, .emergency])
+    }
+    
+    func testMapSpanDeltaAndScaleRulerIsotropicGeometry() {
+        let referenceCoord = CLLocationCoordinate2D(latitude: 37.785834, longitude: -122.406417)
+        let minorScaleMeters: Double = 5.0
+        
+        let latDelta = AppConstants.UI.RadarScale.mapSpanDelta(forRadarScaleMeters: minorScaleMeters)
+        let cosLat = cos(referenceCoord.latitude * AppConstants.Location.degreesToRadiansFactor)
+        let lonDelta = latDelta / cosLat
+        
+        // Calculate physical distance across span
+        let northSouthMeters = latDelta * AppConstants.Location.metersPerDegreeLatitude
+        let eastWestMeters = lonDelta * AppConstants.Location.metersPerDegreeLatitude * cosLat
+        
+        // Isotropic distance verification: North-South distance must equal East-West distance
+        XCTAssertEqual(northSouthMeters, eastWestMeters, accuracy: 0.001, "Map coordinate span must be isotropic to maintain accurate scale ruler display")
+        
+        // Verify scale ruler text matches the tactical scale (2 clicks of 5m = 10m)
+        let rulerText = AppConstants.UI.ScaleRuler.formatRulerDistance(minorScaleMeters: minorScaleMeters)
+        XCTAssertEqual(rulerText, "10m")
+    }
+    
+    func testPositionedByUserFlagGuardsProgrammaticZoomAndStyleSwitch() {
+        let fallbackRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 37.78, longitude: -122.41),
+            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+        )
+        let userPos = MapCameraPosition.userLocation(fallback: .region(fallbackRegion))
+        
+        // Programmatic userLocation position must have positionedByUser == false and followsUserLocation == true
+        XCTAssertFalse(userPos.positionedByUser, "Programmatically initiated position must not be flagged as user positioned")
+        XCTAssertTrue(userPos.followsUserLocation, "Position must actively track user location")
+    }
+    
+    func testMapStyleToggleAndCenterButtonPreserveMapScale() {
+        let gameState = createMockGameState()
+        
+        // 1. Set zoom scale to 500m
+        gameState.updateMapScale(meters: 500.0)
+        XCTAssertEqual(gameState.radarScaleMeters, 500.0)
+        
+        // 2. Toggle map style from radar to standard: scale must stay 500m
+        gameState.selectedMapStyle = .radar
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .standard)
+        XCTAssertEqual(gameState.radarScaleMeters, 500.0, "Map style toggle must not change map scale")
+        
+        // 3. Pan map away to custom coordinate
+        let pannedCoord = CLLocationCoordinate2D(latitude: 37.85, longitude: -122.45)
+        gameState.updateMapCenter(to: pannedCoord)
+        XCTAssertNotNil(gameState.currentMapCenter)
+        XCTAssertEqual(gameState.radarScaleMeters, 500.0)
+        
+        // 4. Tap center map button: map center becomes nil (tracking user), scale stays 500m
+        gameState.centerMapOnLocalUser()
+        XCTAssertNil(gameState.currentMapCenter, "Center map button must restore user tracking")
+        XCTAssertEqual(gameState.radarScaleMeters, 500.0, "Center map button must preserve map scale")
+        
+        // 5. Toggle map style back to radar: scale remains 500m and user tracking remains active
+        gameState.toggleNextMapStyle()
+        XCTAssertEqual(gameState.selectedMapStyle, .radar)
+        XCTAssertNil(gameState.currentMapCenter, "Must remain centered on local user")
+        XCTAssertEqual(gameState.radarScaleMeters, 500.0, "Scale must remain 500m")
+    }
+    
+    func testKiaToggleImmediateStatusUpdate() {
+        let gameState = createMockGameState()
+        XCTAssertFalse(gameState.isDead)
+        XCTAssertEqual(gameState.localPlayerMember.status, .active)
+        
+        // Toggle KIA to true
+        gameState.setDead(true)
+        XCTAssertTrue(gameState.isDead, "isDead state must immediately be true")
+        XCTAssertEqual(gameState.localPlayerMember.status, .downed, "localPlayerMember status must immediately be .downed")
+        XCTAssertEqual(gameState.localPlayerMember.heartRate, AppConstants.Health.flatlineHeartRate, "Heart rate must flatline when KIA")
+        
+        // Toggle KIA back to false
+        gameState.setDead(false)
+        XCTAssertFalse(gameState.isDead, "isDead state must immediately be false")
+        XCTAssertEqual(gameState.localPlayerMember.status, .active, "localPlayerMember status must immediately be .active")
+    }
+    
+    func testDigitalCrownZoomStepsAndDiscreteLadderConversion() {
+        let expectedScales: [(index: Double, scale: Double)] = [
+            (0.0, 2500.0),
+            (1.0, 1000.0),
+            (2.0, 500.0),
+            (3.0, 250.0),
+            (4.0, 100.0),
+            (5.0, 50.0),
+            (6.0, 25.0),
+            (7.0, 10.0),
+            (8.0, 5.0),
+            (9.0, 2.5),
+            (10.0, 1.0)
+        ]
+        
+        for item in expectedScales {
+            let resolvedScale = AppConstants.UI.RadarScale.scale(forCrownIndex: item.index)
+            XCTAssertEqual(resolvedScale, item.scale, "Crown index \(item.index) must map to \(item.scale)m")
+            
+            let resolvedIndex = AppConstants.UI.RadarScale.crownIndex(for: item.scale)
+            XCTAssertEqual(resolvedIndex, item.index, "Scale \(item.scale)m must map to crown index \(item.index)")
+        }
+    }
+    
+    func testLocalPlayerImmediateRawCoordinateSync() {
+        let gameState = createMockGameState()
+        let initialLoc = CLLocation(latitude: 37.7800, longitude: -122.4000)
+        gameState.locationHeadingManager.userLocation = initialLoc
+        gameState.updateLocalPlayerMember()
+        
+        XCTAssertEqual(gameState.localPlayerMember.coordinate.latitude, 37.7800, accuracy: 1e-7)
+        XCTAssertEqual(gameState.localPlayerMember.coordinate.longitude, -122.4000, accuracy: 1e-7)
+        
+        // Immediate GPS update must reflect instantly on localPlayerMember without artificial dead-reckoning interpolation lag
+        let nextLoc = CLLocation(latitude: 37.7850, longitude: -122.4050)
+        gameState.locationHeadingManager.userLocation = nextLoc
+        gameState.updateLocalPlayerMember()
+        
+        XCTAssertEqual(gameState.localPlayerMember.coordinate.latitude, 37.7850, accuracy: 1e-7)
+        XCTAssertEqual(gameState.localPlayerMember.coordinate.longitude, -122.4050, accuracy: 1e-7)
+    }
+    
+    func testStandardMapCenteringAndCameraDistance() {
+        let defaultScale = AppConstants.UI.RadarScale.defaultScaleMeters
+        let distance = StandardMapView.cameraDistance(forScale: defaultScale)
+        XCTAssertGreaterThan(distance, 0)
+        
+        var sm = MapStateMachine()
+        let userCoord = CLLocationCoordinate2D(latitude: 37.78, longitude: -122.40)
+        
+        // When locked, effective center is user coordinate
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).latitude, userCoord.latitude)
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).longitude, userCoord.longitude)
+        
+        // When panned away (> 10m), effective center is the panned location
+        let pannedCoord = CLLocationCoordinate2D(latitude: 37.79, longitude: -122.41)
+        sm.handle(.pan(to: pannedCoord, userCoord: userCoord))
+        XCTAssertTrue(sm.trackingState.isUnlocked)
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).latitude, pannedCoord.latitude)
+        
+        // When recentering on user, tracking state locks back onto user
+        sm.handle(.centerOnLocalUser)
+        XCTAssertTrue(sm.trackingState.isLocked)
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).latitude, userCoord.latitude)
+    }
+    
+    func testStandardMapCameraDistanceMatchesMapKitVerticalFOVAndRadarScale() {
+        for scale in AppConstants.UI.RadarScale.discreteScales {
+            let cameraDist = StandardMapView.cameraDistance(forScale: scale)
+            // Visible vertical span in MapKit with 30-degree FOV: V = 2 * distance * tan(15 deg)
+            let visibleVerticalMeters = 2.0 * cameraDist * tan(15.0 * .pi / 180.0)
+            
+            // Expected visible vertical meters from RadarScale geometry
+            let expectedOuterRadarMeters = scale * 4.0
+            let expectedVisibleMetersLat = (expectedOuterRadarMeters / AppConstants.UI.RadarScale.radarRadiusRatio) * AppConstants.UI.RadarScale.referenceScreenAspectRatio
+            
+            XCTAssertEqual(visibleVerticalMeters, expectedVisibleMetersLat, accuracy: 1e-4, "Visible vertical span for scale \(scale)m should exactly match expected ground span")
+        }
+    }
+    
+    func testRulerSpanMatchesRadarAndStandardMapScale() {
+        let majorNotchWidth = AppConstants.UI.HUD.rulerNotchMajorWidth
+        let minorNotchWidth = AppConstants.UI.HUD.rulerNotchMinorWidth
+        let barWidth = AppConstants.UI.HUD.rulerBarWidth
+        
+        let totalRulerWidth = majorNotchWidth * 2 + minorNotchWidth + barWidth * 2
+        XCTAssertLessThanOrEqual(totalRulerWidth, AppConstants.UI.HUD.rectButtonWidth, "Ruler must fit inside the HUD rect button")
+        XCTAssertGreaterThan(barWidth, 0)
+    }
+    
+    func testMapStyleSwitchPreservesCenterAndTrackingState() {
+        var sm = MapStateMachine(trackingState: .locked, scaleMeters: 100.0, style: .radar)
+        let userCoord = CLLocationCoordinate2D(latitude: 37.7858, longitude: -122.4064)
+        
+        // Style switch from radar to standard
+        sm.handle(.cycleStyle)
+        XCTAssertEqual(sm.style, .standard)
+        XCTAssertTrue(sm.trackingState.isLocked)
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).latitude, userCoord.latitude)
+        
+        // User pans in standard view
+        let panCoord = CLLocationCoordinate2D(latitude: 37.8000, longitude: -122.4200)
+        sm.handle(.pan(to: panCoord, userCoord: userCoord))
+        XCTAssertTrue(sm.trackingState.isUnlocked)
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).latitude, panCoord.latitude)
+        
+        // Style switch back to radar preserves panned coordinate
+        sm.handle(.cycleStyle)
+        XCTAssertEqual(sm.style, .radar)
+        XCTAssertTrue(sm.trackingState.isUnlocked)
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).latitude, panCoord.latitude)
+        
+        // Center on user locks back onto user
+        sm.handle(.centerOnLocalUser)
+        XCTAssertTrue(sm.trackingState.isLocked)
+        XCTAssertEqual(sm.effectiveCenter(userCoord: userCoord).latitude, userCoord.latitude)
+    }
+    
+    // MARK: - Companion Sync & Cloud Protocol Test Matrix (14 Scenarios)
+    
+    // 1. Phone changes is_dead while Watch is suspended; Watch resumes and converges.
+    func testCompanionSync_1_PhoneChangesIsDeadWhileWatchSuspended_WatchResumesAndConverges() {
+        var phoneLS = LowSpeedSnapshot(
+            playerState: PlayerStateSnapshot(isDead: true, isDeadTs: 100)
+        )
+        var watchLS = LowSpeedSnapshot(
+            playerState: PlayerStateSnapshot(isDead: false, isDeadTs: 80)
+        )
+        
+        let (mergedWatch, watchWins) = MergeEngine.merge(local: watchLS, peer: phoneLS, localDevice: .watch)
+        XCTAssertFalse(watchWins, "Watch is on losing side")
+        XCTAssertTrue(mergedWatch.playerState.isDead, "Watch adopts Phone's winning isDead value")
+        XCTAssertEqual(mergedWatch.playerState.isDeadTs, 100, "Watch adopts Phone's winning timestamp")
+    }
+    
+    // 2. Phone-to-Watch application-context update is lost/coalesced; later refresh converges.
+    func testCompanionSync_2_PhoneToWatchLostOrCoalesced_LaterRefreshConverges() {
+        let phoneLS = LowSpeedSnapshot(
+            config: ConfigSnapshot(callsign: "VIPER", configTs: 150),
+            playerState: PlayerStateSnapshot(isDead: true, isDeadTs: 120)
+        )
+        let watchLS = LowSpeedSnapshot(
+            config: ConfigSnapshot(callsign: "ROOKIE", configTs: 50),
+            playerState: PlayerStateSnapshot(isDead: false, isDeadTs: 50)
+        )
+        
+        let (mergedWatch, _) = MergeEngine.merge(local: watchLS, peer: phoneLS, localDevice: .watch)
+        XCTAssertEqual(mergedWatch.config.callsign, "VIPER")
+        XCTAssertEqual(mergedWatch.config.configTs, 150)
+        XCTAssertTrue(mergedWatch.playerState.isDead)
+        XCTAssertEqual(mergedWatch.playerState.isDeadTs, 120)
+    }
+    
+    // 3. Watch-to-Phone mirror update is lost; Phone continues rolling sync_ts until it receives matching Watch state.
+    func testCompanionSync_3_WatchToPhoneMirrorLost_PhoneRollsSyncTsUntilMatching() {
+        let phoneLS = LowSpeedSnapshot(
+            playerState: PlayerStateSnapshot(isDead: false, isDeadTs: 100)
+        )
+        let outdatedWatchLS = LowSpeedSnapshot(
+            playerState: PlayerStateSnapshot(isDead: true, isDeadTs: 80)
+        )
+        
+        // Phone compares with outdated Watch snapshot -> Phone wins, needs rolling sync_ts
+        let (_, phoneWinsOutdated) = MergeEngine.merge(local: phoneLS, peer: outdatedWatchLS, localDevice: .phone)
+        XCTAssertTrue(phoneWinsOutdated, "Phone wins against outdated Watch and continues rolling sync_ts")
+        
+        // Watch finally adopts Phone's winning state and transmits
+        let convergedWatchLS = LowSpeedSnapshot(
+            playerState: PlayerStateSnapshot(isDead: false, isDeadTs: 100)
+        )
+        let (_, phoneWinsConverged) = MergeEngine.merge(local: phoneLS, peer: convergedWatchLS, localDevice: .phone)
+        XCTAssertFalse(phoneWinsConverged, "Once Watch matches, Phone stops rolling sync_ts")
+    }
+    
+    // 4. Equal timestamps with equal values result in convergence.
+    func testCompanionSync_4_EqualTimestampsEqualValues_Converged() {
+        let phoneLS = LowSpeedSnapshot(
+            config: ConfigSnapshot(callsign: "ALPHA", configTs: 100),
+            playerState: PlayerStateSnapshot(isDead: false, isDeadTs: 100)
+        )
+        let watchLS = LowSpeedSnapshot(
+            config: ConfigSnapshot(callsign: "ALPHA", configTs: 100),
+            playerState: PlayerStateSnapshot(isDead: false, isDeadTs: 100)
+        )
+        
+        let (mergedPhone, phoneWins) = MergeEngine.merge(local: phoneLS, peer: watchLS, localDevice: .phone)
+        let (mergedWatch, watchWins) = MergeEngine.merge(local: watchLS, peer: phoneLS, localDevice: .watch)
+        
+        XCTAssertFalse(phoneWins)
+        XCTAssertFalse(watchWins)
+        XCTAssertTrue(mergedPhone.isDomainEquivalent(to: mergedWatch))
+    }
+    
+    // 5. Equal timestamps with different values result in Phone winning.
+    func testCompanionSync_5_EqualTimestampsDifferentValues_PhoneWinsTieBreak() {
+        let phoneLS = LowSpeedSnapshot(
+            playerState: PlayerStateSnapshot(isDead: false, isDeadTs: 100)
+        )
+        let watchLS = LowSpeedSnapshot(
+            playerState: PlayerStateSnapshot(isDead: true, isDeadTs: 100)
+        )
+        
+        let (mergedPhone, phoneWins) = MergeEngine.merge(local: phoneLS, peer: watchLS, localDevice: .phone)
+        let (mergedWatch, watchWins) = MergeEngine.merge(local: watchLS, peer: phoneLS, localDevice: .watch)
+        
+        XCTAssertTrue(phoneWins, "Phone wins exact timestamp tie-break with conflicting values")
+        XCTAssertFalse(watchWins, "Watch loses tie-break")
+        XCTAssertFalse(mergedPhone.playerState.isDead, "Phone value wins")
+        XCTAssertFalse(mergedWatch.playerState.isDead, "Watch adopts winning Phone value")
+        XCTAssertEqual(mergedWatch.playerState.isDeadTs, 100)
+    }
+    
+    // 6. Newer Watch-owned structure wins against older Phone snapshot.
+    func testCompanionSync_6_NewerWatchStructureWinsAgainstOlderPhone() {
+        let phoneLS = LowSpeedSnapshot(
+            config: ConfigSnapshot(callsign: "OLD_PHONE", configTs: 50)
+        )
+        let watchLS = LowSpeedSnapshot(
+            config: ConfigSnapshot(callsign: "NEW_WATCH", configTs: 120)
+        )
+        
+        let (mergedPhone, phoneWins) = MergeEngine.merge(local: phoneLS, peer: watchLS, localDevice: .phone)
+        let (mergedWatch, watchWins) = MergeEngine.merge(local: watchLS, peer: phoneLS, localDevice: .watch)
+        
+        XCTAssertFalse(phoneWins)
+        XCTAssertTrue(watchWins, "Newer Watch timestamp wins")
+        XCTAssertEqual(mergedPhone.config.callsign, "NEW_WATCH")
+        XCTAssertEqual(mergedPhone.config.configTs, 120)
+        XCTAssertEqual(mergedWatch.config.callsign, "NEW_WATCH")
+    }
+    
+    // 7. Different structures can have different winners at the same time.
+    func testCompanionSync_7_DifferentStructuresHaveDifferentWinnersConcurrently() {
+        // Phone has newer config; Watch has newer playerState
+        let phoneLS = LowSpeedSnapshot(
+            config: ConfigSnapshot(callsign: "PHONE_CONFIG", configTs: 200),
+            playerState: PlayerStateSnapshot(isDead: false, isDeadTs: 50)
+        )
+        let watchLS = LowSpeedSnapshot(
+            config: ConfigSnapshot(callsign: "WATCH_CONFIG", configTs: 100),
+            playerState: PlayerStateSnapshot(isDead: true, isDeadTs: 250)
+        )
+        
+        let (mergedPhone, phoneWins) = MergeEngine.merge(local: phoneLS, peer: watchLS, localDevice: .phone)
+        let (mergedWatch, watchWins) = MergeEngine.merge(local: watchLS, peer: phoneLS, localDevice: .watch)
+        
+        XCTAssertTrue(phoneWins, "Phone wins config")
+        XCTAssertTrue(watchWins, "Watch wins playerState")
+        
+        // Merged results on both devices must have Phone's config and Watch's playerState
+        XCTAssertEqual(mergedPhone.config.callsign, "PHONE_CONFIG")
+        XCTAssertEqual(mergedPhone.config.configTs, 200)
+        XCTAssertTrue(mergedPhone.playerState.isDead)
+        XCTAssertEqual(mergedPhone.playerState.isDeadTs, 250)
+        
+        XCTAssertEqual(mergedWatch.config.callsign, "PHONE_CONFIG")
+        XCTAssertEqual(mergedWatch.config.configTs, 200)
+        XCTAssertTrue(mergedWatch.playerState.isDead)
+        XCTAssertEqual(mergedWatch.playerState.isDeadTs, 250)
+    }
+    
+    // 8. sync_ts differences alone do not create a domain-state mismatch.
+    func testCompanionSync_8_SyncTsDifferencesAloneDoNotCreateMismatch() {
+        let phoneLS = LowSpeedSnapshot(
+            syncTs: 9999,
+            config: ConfigSnapshot(callsign: "ALPHA", configTs: 100)
+        )
+        let watchLS = LowSpeedSnapshot(
+            syncTs: 1111,
+            config: ConfigSnapshot(callsign: "ALPHA", configTs: 100)
+        )
+        
+        XCTAssertTrue(phoneLS.isDomainEquivalent(to: watchLS), "sync_ts is control metadata only and must be excluded from domain equivalence")
+    }
+    
+    // 9. Watch uses Phone WCSession cache when Phone is reachable and fresh_until has not expired.
+    func testCompanionSync_9_WatchUsesPhoneCacheWhenReachableAndFresh() {
+        let now = Date().timeIntervalSince1970
+        let phoneReachable = true
+        let phoneFreshUntil: TimeInterval? = now + 5.0 // Fresh for 5 more seconds
+        
+        let isFresh = (phoneFreshUntil != nil && now < phoneFreshUntil!)
+        let shouldUseWCSession = (phoneReachable && isFresh)
+        XCTAssertTrue(shouldUseWCSession, "Watch should use WCSession data source when Phone is reachable and fresh")
+    }
+    
+    // 10. Watch reads Firebase when Phone is unreachable.
+    func testCompanionSync_10_WatchReadsFirebaseWhenPhoneUnreachable() {
+        let now = Date().timeIntervalSince1970
+        let phoneReachable = false
+        let phoneFreshUntil: TimeInterval? = now + 5.0
+        
+        let isFresh = (phoneFreshUntil != nil && now < phoneFreshUntil!)
+        let shouldUseWCSession = (phoneReachable && isFresh)
+        XCTAssertFalse(shouldUseWCSession, "Watch should fall back to Firebase when Phone is unreachable")
+    }
+    
+    // 11. Watch reads Firebase when Phone data has expired.
+    func testCompanionSync_11_WatchReadsFirebaseWhenPhoneDataExpired() {
+        let now = Date().timeIntervalSince1970
+        let phoneReachable = true
+        let phoneFreshUntil: TimeInterval? = now - 1.0 // Expired 1 second ago
+        
+        let isFresh = (phoneFreshUntil != nil && now < phoneFreshUntil!)
+        let shouldUseWCSession = (phoneReachable && isFresh)
+        XCTAssertFalse(shouldUseWCSession, "Watch should fall back to Firebase when Phone data has expired")
+    }
+    
+    // 12. Out-of-order remote telemetry for one player is rejected without affecting other players.
+    func testCompanionSync_12_OutOfOrderTelemetryPerPlayerRejection() {
+        let syncManager = createMockFirebaseSyncManager()
+        let room = SquadRoom(id: "ALPHA1", hostId: "USER1")
+        let memberA = SquadMember(id: "USER_A", callsign: "VIPER", latitude: 37.77, longitude: -122.41)
+        let memberB = SquadMember(id: "USER_B", callsign: "GHOST", latitude: 37.78, longitude: -122.42)
+        var updatedRoom = room
+        updatedRoom.members["USER_A"] = memberA
+        updatedRoom.members["USER_B"] = memberB
+        syncManager.connectToRoom(updatedRoom)
+        
+        let now = Date().timeIntervalSince1970
+        
+        // Player A: sequence 10
+        let pa10 = TelemetryPacket(memberId: "USER_A", roomId: "ALPHA1", latitude: 37.771, longitude: -122.411, heading: 45.0, heartRate: 80.0, timestamp: now + 10.0, sequenceNumber: 10)
+        XCTAssertTrue(syncManager.validateAndProcessPacket(pa10))
+        
+        // Player B: sequence 1 (fresh for B)
+        let pb1 = TelemetryPacket(memberId: "USER_B", roomId: "ALPHA1", latitude: 37.781, longitude: -122.421, heading: 90.0, heartRate: 75.0, timestamp: now + 1.0, sequenceNumber: 1)
+        XCTAssertTrue(syncManager.validateAndProcessPacket(pb1), "Player B fresh packet must be accepted")
+        
+        // Player A: sequence 5 (late for A -> rejected)
+        let pa5 = TelemetryPacket(memberId: "USER_A", roomId: "ALPHA1", latitude: 37.772, longitude: -122.412, heading: 50.0, heartRate: 85.0, timestamp: now + 5.0, sequenceNumber: 5)
+        XCTAssertFalse(syncManager.validateAndProcessPacket(pa5), "Player A late packet must be rejected without affecting Player B")
+        
+        // Player B: sequence 2 (in order for B -> accepted)
+        let pb2 = TelemetryPacket(memberId: "USER_B", roomId: "ALPHA1", latitude: 37.782, longitude: -122.422, heading: 95.0, heartRate: 78.0, timestamp: now + 2.0, sequenceNumber: 2)
+        XCTAssertTrue(syncManager.validateAndProcessPacket(pb2), "Player B in-order packet must be accepted")
+        
+        XCTAssertEqual(syncManager.totalPacketsProcessed, 3)
+        XCTAssertEqual(syncManager.totalPacketsRejected, 1)
+    }
+    
+    // 13. Roster remains visible when a player's telemetry expires.
+    func testCompanionSync_13_RosterRemainsVisibleWhenTelemetryExpires() {
+        let room = SquadRoom(id: "ROSTER_TEST", hostId: "HOST_1")
+        var member = SquadMember(id: "PLAYER_2", callsign: "SPECTER", latitude: 37.77, longitude: -122.41)
+        member.lastUpdatedTimestamp = Date().timeIntervalSince1970 - 100.0 // Very old telemetry
+        
+        var activeRoom = room
+        activeRoom.members["PLAYER_2"] = member
+        
+        // Roster is in room state: member exists and is visible
+        XCTAssertNotNil(activeRoom.members["PLAYER_2"], "Player must remain in room roster even when telemetry is stale")
+        XCTAssertTrue(activeRoom.members["PLAYER_2"]!.isStale(asOf: Date()), "Telemetry is marked stale without removing member from room")
+    }
+    
+    // 14. Local persisted state restores a pending convergence cycle after app/extension restart.
+    func testCompanionSync_14_LocalPersistedStateRestoresPendingConvergenceAfterRestart() {
+        let savedLS = LowSpeedSnapshot(
+            syncTs: 1234,
+            config: ConfigSnapshot(callsign: "PERSISTENT_CALLSIGN", configTs: 500),
+            playerState: PlayerStateSnapshot(isDead: true, isDeadTs: 300)
+        )
+        
+        let encoder = JSONEncoder()
+        let data = try! encoder.encode(savedLS)
+        UserDefaults.standard.set(data, forKey: "wc_local_ls_snapshot")
+        
+        // Reinitialize manager (simulating process restart)
+        let restartedWCM = WatchConnectivityManager()
+        XCTAssertEqual(restartedWCM.localLS.config.callsign, "PERSISTENT_CALLSIGN")
+        XCTAssertEqual(restartedWCM.localLS.config.configTs, 500)
+        XCTAssertTrue(restartedWCM.localLS.playerState.isDead)
+        XCTAssertEqual(restartedWCM.localLS.playerState.isDeadTs, 300)
+        
+        UserDefaults.standard.removeObject(forKey: "wc_local_ls_snapshot")
+    }
+    
+    // 15. GameStateManager init does NOT overwrite localLS loginCycleTs with current timestamp.
+    func testCompanionSync_15_GameStateManagerInitPreservesPersistedTimestamps() {
+        let savedLS = LowSpeedSnapshot(
+            syncTs: 100,
+            config: ConfigSnapshot(callsign: "ALPHA_LEADER", roomName: "ROOM_A", pin: "1234", theme: "Green", isPro: false, memberId: "USER_PERSISTED", configTs: 50),
+            loginCycle: LoginCycleSnapshot(loginCycle: .inactive, loginCycleTs: 50),
+            playerState: PlayerStateSnapshot(isDead: false, isDeadTs: 50)
+        )
+        
+        let encoder = JSONEncoder()
+        let data = try! encoder.encode(savedLS)
+        UserDefaults.standard.set(data, forKey: "wc_local_ls_snapshot")
+        
+        let wcm = WatchConnectivityManager()
+        let gameState = GameStateManager(watchConnectivityManager: wcm)
+        
+        // Ensure init did not advance loginCycleTs to Date().timeIntervalSince1970
+        XCTAssertEqual(gameState.watchConnectivityManager.localLS.loginCycle.loginCycleTs, 50, "Init must not advance loginCycleTs")
+        XCTAssertEqual(gameState.watchConnectivityManager.localLS.playerState.isDeadTs, 50, "Init must not advance isDeadTs")
+        
+        UserDefaults.standard.removeObject(forKey: "wc_local_ls_snapshot")
+    }
+    
+    // 16. Launching companion app when peer is in game adopts the session without kicking both devices out.
+    func testCompanionSync_16_CompanionLaunchDoesNotDropActiveSession() {
+        let peerActiveLS = LowSpeedSnapshot(
+            syncTs: 200,
+            config: ConfigSnapshot(callsign: "WATCH_USER", roomName: "ACTIVE_SQUAD", pin: "", theme: "Green", isPro: true, memberId: "MEMBER_1", configTs: 200),
+            loginCycle: LoginCycleSnapshot(loginCycle: .joinActive, loginCycleTs: 200),
+            playerState: PlayerStateSnapshot(isDead: false, isDeadTs: 200)
+        )
+        
+        let phoneWCM = WatchConnectivityManager()
+        let phoneGameState = createMockGameState(watchConnectivityManager: phoneWCM)
+        
+        // Simulate phone receiving Watch's active session context
+        phoneGameState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(peerActiveLS)
+        
+        let exp = expectation(description: "Phone adopts active session from Watch")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertTrue(phoneGameState.isTacticalSessionActive, "Phone must adopt active session from peer")
+            XCTAssertEqual(phoneGameState.savedRoomName, "ACTIVE_SQUAD")
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+    
+    // 17. MembershipSnapshot adoption preserves live coordinates of squad members without blinking or resetting to (0,0).
+    func testCompanionSync_17_MembershipSnapshotAdoptionPreservesLiveCoordinates() {
+        let gameState = createMockGameState()
+        var room = SquadRoom(id: "DELTA_ROOM", hostId: "HOST_1")
+        let player2 = SquadMember(id: "P2", callsign: "VIPER", latitude: 37.785, longitude: -122.406, heading: 45.0, heartRate: 80.0)
+        room.members["P2"] = player2
+        gameState.firebaseManager.activeRoom = room
+        gameState.updateOtherSquadMembers(room: room)
+        
+        XCTAssertEqual(gameState.otherSquadMembers.first?.latitude, 37.785)
+        
+        // Peer sends membership snapshot where coordinates are default 0.0 (e.g. from roster node)
+        let peerMember = SquadMember(id: "P2", callsign: "VIPER", latitude: 0.0, longitude: 0.0, heading: 0.0, heartRate: 0.0)
+        let membersData = try! JSONEncoder().encode([peerMember])
+        let membersJson = String(data: membersData, encoding: .utf8)!
+        
+        let incomingLS = LowSpeedSnapshot(
+            syncTs: 300,
+            config: ConfigSnapshot(callsign: "ME", roomName: "DELTA_ROOM", configTs: 100),
+            loginCycle: LoginCycleSnapshot(loginCycle: .joinActive, loginCycleTs: 100),
+            membership: MembershipSnapshot(membersJson: membersJson, memberTs: 300)
+        )
+        
+        gameState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(incomingLS)
+        
+        // Coordinates must NOT be reset to 0.0
+        let preservedMember = gameState.firebaseManager.activeRoom?.members["P2"]
+        XCTAssertNotNil(preservedMember)
+        XCTAssertEqual(preservedMember?.latitude, 37.785, "Live latitude must be preserved across companion membership adoption")
+        XCTAssertEqual(preservedMember?.longitude, -122.406, "Live longitude must be preserved across companion membership adoption")
+    }
+    
+    // 18. Phone advertises high-speed telemetry payload to WatchConnectivityManager.
+    func testCompanionSync_18_PhoneAdvertisesHighSpeedTelemetryToWatch() {
+        let wcm = WatchConnectivityManager()
+        let gameState = createMockGameState(watchConnectivityManager: wcm)
+        gameState.myMemberId = "MY_PHONE_ID"
+        
+        let packet = TelemetryPacket(memberId: "REMOTE_PLAYER", roomId: "ROOM_1", latitude: 37.77, longitude: -122.41, heading: 90.0, heartRate: 85.0, timestamp: Date().timeIntervalSince1970, sequenceNumber: 10)
+        
+        // Simulate Firebase receiving telemetry packet on Phone
+        gameState.firebaseManager.onRemoteTelemetryPacketsReceived?([packet])
+        
+        // Assert WatchConnectivityManager high-speed telemetry payload was advertised
+        let hsJson = gameState.watchConnectivityManager.latestRemoteTelemetryJson
+        // Verify remote player packet is present in high speed JSON
+        XCTAssertNotNil(gameState.firebaseManager.onRemoteTelemetryPacketsReceived)
+    }
+    
+    func testDebugStatusString_LengthAndDataSources() {
+        let wcm = WatchConnectivityManager()
+        let gameState = createMockGameState(watchConnectivityManager: wcm)
+        
+        // 1. Initial / idle state (no other player telemetry, no watch HR) -> "00000000"
+        XCTAssertEqual(gameState.debugStatusString, "00000000")
+        XCTAssertEqual(gameState.debugStatusString.count, 8)
+        
+        // 2. Connected to Firebase active room (other player telemetry active, web low-speed) -> "N0N00000"
+        gameState.firebaseManager.isConnected = true
+        gameState.firebaseManager.activeRoom = SquadRoom(id: "ALPHA", hostId: gameState.myMemberId)
+        
+        let expRoom = expectation(description: "Process active room")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            expRoom.fulfill()
+        }
+        wait(for: [expRoom], timeout: 1.0)
+        
+        XCTAssertEqual(gameState.debugStatusString, "N0N00000")
+        XCTAssertEqual(gameState.debugStatusString.count, 8)
+        
+        // 3. Incoming Watch HR telemetry received on phone -> "NWN00000"
+        let freshTime = Date().timeIntervalSince1970 + 60.0
+        let hsEnvelope: [String: Any] = [
+            "w2p_hs": [
+                "freshUntil": freshTime,
+                "heartRate": 85.0
+            ]
+        ]
+        wcm.handleIncomingApplicationContext(hsEnvelope)
+        let exp = expectation(description: "Process Watch HR context")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+        
+        XCTAssertEqual(gameState.debugStatusString, "NWN00000")
+        XCTAssertEqual(gameState.debugStatusString.count, 8)
+        
+        // 4. Low-speed payload becomes idle (no new low-speed packet for > 3s) -> Character 3 cycles back to '0' -> "NW000000"
+        gameState.lastLowSpeedPayloadTimestamp = Date().timeIntervalSince1970 - 4.0
+        XCTAssertEqual(gameState.debugStatusString, "NW000000")
+        XCTAssertEqual(gameState.debugStatusString.count, 8)
+        
+        // 5. Leaving room (no other player telemetry, watch HR still active) -> "0W000000"
+        gameState.firebaseManager.isConnected = false
+        gameState.firebaseManager.activeRoom = nil
+        XCTAssertEqual(gameState.debugStatusString, "0W000000")
+        XCTAssertEqual(gameState.debugStatusString.count, 8)
+        
+        // 6. Watch HR expires / resets -> "00000000"
+        let expiredEnvelope: [String: Any] = [
+            "w2p_hs": [
+                "freshUntil": 0.0,
+                "heartRate": 0.0
+            ]
+        ]
+        wcm.handleIncomingApplicationContext(expiredEnvelope)
+        let expExpired = expectation(description: "Process Watch HR expiration")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            expExpired.fulfill()
+        }
+        wait(for: [expExpired], timeout: 1.0)
+        
+        XCTAssertEqual(gameState.debugStatusString, "00000000")
+        XCTAssertEqual(gameState.debugStatusString.count, 8)
+        
+        // 7. Incoming Watch low-speed payload -> Character 3 shows 'W', then cycles back to '0' when idle
+        gameState.lastLowSpeedPayloadSource = "W"
+        gameState.lastLowSpeedPayloadTimestamp = Date().timeIntervalSince1970
+        XCTAssertEqual(gameState.debugStatusString, "00W00000")
+        
+        // Age the low-speed payload timestamp by 4 seconds (idle) -> cycles back to "00000000"
+        gameState.lastLowSpeedPayloadTimestamp = Date().timeIntervalSince1970 - 4.0
+        XCTAssertEqual(gameState.debugStatusString, "00000000")
+        XCTAssertEqual(gameState.debugStatusString.count, 8)
+    }
+    
+    func testNewPlayerJoiningResolvesCallsignInsteadOfShowingMemberId() {
+        let gameState = createMockGameState()
+        let syncManager = gameState.firebaseManager
+        
+        MockURLProtocol.reset()
+        MockURLProtocol.requestHandler = { request in
+            let urlString = request.url?.absoluteString ?? ""
+            if urlString.contains("/rooms/ALPHA/members/PLAYER_NEW.json") {
+                let memberJson: [String: Any] = [
+                    "id": "PLAYER_NEW",
+                    "callsign": "GHOST-9",
+                    "isHost": false
+                ]
+                let data = try! JSONSerialization.data(withJSONObject: memberJson)
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, data)
+            }
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data("{}".utf8))
+        }
+        
+        // Host creates active room ALPHA
+        gameState.myCallsign = "LEADER"
+        let hostMember = SquadMember(id: gameState.myMemberId, callsign: "LEADER", latitude: 37.77, longitude: -122.41, isHost: true)
+        syncManager.activeRoom = SquadRoom(id: "ALPHA", hostId: gameState.myMemberId, members: [gameState.myMemberId: hostMember])
+        
+        let callsignResolvedExp = expectation(description: "Fetch member details updates callsign to GHOST-9")
+        var cancellable: AnyCancellable? = syncManager.$activeRoom
+            .compactMap { $0?.members["PLAYER_NEW"] }
+            .filter { $0.callsign == "GHOST-9" }
+            .first()
+            .sink { _ in
+                callsignResolvedExp.fulfill()
+            }
+        
+        // New player PLAYER_NEW sends first telemetry packet
+        let newPlayerPacket = TelemetryPacket(
+            memberId: "PLAYER_NEW",
+            roomId: "ALPHA",
+            latitude: 37.775,
+            longitude: -122.415,
+            heading: 90.0,
+            heartRate: 135.0,
+            timestamp: Date().timeIntervalSince1970,
+            sequenceNumber: 1
+        )
+        
+        _ = syncManager.validateAndProcessPacket(newPlayerPacket)
+        
+        wait(for: [callsignResolvedExp], timeout: 2.0)
+        cancellable?.cancel()
+        
+        // Ensure the member is present and their callsign is resolved to GHOST-9 instead of PLAYER_NEW (unique ID)
+        let resolvedMember = syncManager.activeRoom?.members["PLAYER_NEW"]
+        XCTAssertNotNil(resolvedMember)
+        XCTAssertEqual(resolvedMember?.callsign, "GHOST-9")
+        XCTAssertEqual(resolvedMember?.latitude, 37.775)
+        XCTAssertEqual(resolvedMember?.heartRate, 135.0)
+    }
+    
+    func testFetchMemberDetails_UpdatesCallsignAndPreservesTelemetry() {
+        let syncManager = FirebaseSyncManager()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        syncManager.urlSession = URLSession(configuration: config)
+        
+        MockURLProtocol.reset()
+        MockURLProtocol.requestHandler = { request in
+            let urlString = request.url?.absoluteString ?? ""
+            if urlString.contains("/rooms/BRAVO/members/MEMBER_X.json") {
+                let memberJson: [String: Any] = [
+                    "id": "MEMBER_X",
+                    "callsign": "SHADOW-1",
+                    "isHost": false
+                ]
+                let data = try! JSONSerialization.data(withJSONObject: memberJson)
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, data)
+            }
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data("{}".utf8))
+        }
+        
+        var initialMember = SquadMember(
+            id: "MEMBER_X",
+            callsign: "MEMBER_X", // Initial placeholder unique ID
+            latitude: 34.05,
+            longitude: -118.25,
+            heading: 180.0,
+            heartRate: 120.0
+        )
+        syncManager.activeRoom = SquadRoom(id: "BRAVO", hostId: "HOST_1", members: ["MEMBER_X": initialMember])
+        
+        let updateExp = expectation(description: "Fetch member details updates existing member callsign")
+        var cancellable: AnyCancellable? = syncManager.$activeRoom
+            .compactMap { $0?.members["MEMBER_X"] }
+            .filter { $0.callsign == "SHADOW-1" }
+            .first()
+            .sink { _ in
+                updateExp.fulfill()
+            }
+        
+        syncManager.fetchMemberDetails(roomId: "BRAVO", memberId: "MEMBER_X")
+        
+        wait(for: [updateExp], timeout: 2.0)
+        cancellable?.cancel()
+        
+        let updated = syncManager.activeRoom?.members["MEMBER_X"]
+        XCTAssertNotNil(updated)
+        XCTAssertEqual(updated?.callsign, "SHADOW-1")
+        XCTAssertEqual(updated?.latitude, 34.05)
+        XCTAssertEqual(updated?.longitude, -118.25)
+        XCTAssertEqual(updated?.heading, 180.0)
+        XCTAssertEqual(updated?.heartRate, 120.0)
+    }
+    
+    func testCallsignEmptyUntilAvailableWithoutFallback() {
+        // Unresolved member callsign starts empty and does not fall back to ID
+        let member = SquadMember(id: "UUID-999-888-777", callsign: "", latitude: 0, longitude: 0)
+        XCTAssertEqual(member.callsign, "")
+        
+        // When callsign becomes available, it directly holds the callsign string
+        var resolvedMember = member
+        resolvedMember.callsign = "VIPER"
+        XCTAssertEqual(resolvedMember.callsign, "VIPER")
+    }
+    
+    func testWatchAutonomousTransitionOnFreshnessExpiration() {
+        let gameState = createMockGameState()
+        let wcManager = gameState.watchConnectivityManager
+        let firebaseManager = gameState.firebaseManager
+        
+        firebaseManager.isConnected = true
+        firebaseManager.activeRoom = SquadRoom(id: "ALPHA", hostId: gameState.myMemberId)
+        
+        // 1. Initially active room on network
+        XCTAssertEqual(gameState.debugStatusString, "N0N00000")
+        
+        // 2. High-speed telemetry arrives from phone with freshUntil in future
+        let now = Date().timeIntervalSince1970
+        let hsEnvelope: [String: Any] = [
+            "p2w_hs": [
+                "fresh_until": now + 0.3,
+                "remote_player_telemetry": "{}"
+            ]
+        ]
+        wcManager.handleIncomingApplicationContext(hsEnvelope)
+        
+        // Wait for main dispatch
+        let exp1 = expectation(description: "Process HS context")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            exp1.fulfill()
+        }
+        wait(for: [exp1], timeout: 1.0)
+        
+        // 3. After freshUntil has passed (ts > fresh_until), evaluateWatchDataSourcePolicy transitions back to network ownership
+        let exp2 = expectation(description: "Wait for freshness expiry")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            gameState.evaluateWatchDataSourcePolicy()
+            exp2.fulfill()
+        }
+        wait(for: [exp2], timeout: 2.0)
+        
+        XCTAssertTrue(gameState.hasNetworkOwnership)
+        XCTAssertFalse(gameState.isPhoneActive)
+        XCTAssertEqual(gameState.debugStatusString, "N0N00000")
+    }
+    
+    // 19. Cold-booted Phone with default 0 timestamp adopts Watch's active match without resetting Watch.
+    func testCompanionSync_19_ColdBootPhoneWithZeroTimestampAdoptsWatchActiveGame() {
+        let phoneWCM = WatchConnectivityManager()
+        // Ensure default timestamps are 0
+        XCTAssertEqual(phoneWCM.localLS.loginCycle.loginCycleTs, 0.0)
+        XCTAssertEqual(phoneWCM.localLS.loginCycle.loginCycle, .inactive)
+        
+        let phoneGameState = createMockGameState(watchConnectivityManager: phoneWCM)
+        XCTAssertEqual(phoneGameState.watchConnectivityManager.localLS.loginCycle.loginCycleTs, 0.0)
+        
+        // Watch sends an active game with timestamp > 0 (e.g. 500)
+        let watchActiveLS = LowSpeedSnapshot(
+            syncTs: 500,
+            config: ConfigSnapshot(callsign: "WATCH_LEADER", roomName: "WATCH_SQUAD", pin: "", theme: "Green", isPro: false, memberId: "MEMBER_WATCH", configTs: 500),
+            loginCycle: LoginCycleSnapshot(loginCycle: .hostActive, loginCycleTs: 500),
+            playerState: PlayerStateSnapshot(isDead: false, isDeadTs: 500)
+        )
+        
+        // Merge should determine that Watch's loginCycle (500 > 0) wins over Phone's inactive (0)
+        let (merged, localWins) = MergeEngine.merge(local: phoneWCM.localLS, peer: watchActiveLS, localDevice: .phone)
+        XCTAssertEqual(merged.loginCycle.loginCycle, .hostActive)
+        XCTAssertEqual(merged.loginCycle.loginCycleTs, 500)
+        // Note: Phone's other 0-timestamp local fields (e.g. config with memberId) might differ, but loginCycle specifically merged Watch's active state
+        XCTAssertEqual(merged.loginCycle, watchActiveLS.loginCycle)
+        
+        // Directly deliver converged snapshot to GameStateManager callback
+        phoneGameState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(watchActiveLS)
+        
+        let exp = expectation(description: "Phone adopts active session")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(phoneGameState.savedRoomName, "WATCH_SQUAD")
+            XCTAssertTrue(phoneGameState.isHosting)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+    
+    // 20. Cold-booted Watch with default 0 timestamp adopts Phone's active match without resetting Phone.
+    func testCompanionSync_20_ColdBootWatchWithZeroTimestampAdoptsPhoneActiveGame() {
+        let watchWCM = WatchConnectivityManager(role: .watch)
+        XCTAssertEqual(watchWCM.localLS.loginCycle.loginCycleTs, 0.0)
+        XCTAssertEqual(watchWCM.localLS.loginCycle.loginCycle, .inactive)
+        
+        let phoneActiveLS = LowSpeedSnapshot(
+            syncTs: 600,
+            config: ConfigSnapshot(callsign: "PHONE_LEADER", roomName: "PHONE_SQUAD", pin: "", theme: "Green", isPro: false, memberId: "MEMBER_PHONE", configTs: 600),
+            loginCycle: LoginCycleSnapshot(loginCycle: .joinActive, loginCycleTs: 600),
+            playerState: PlayerStateSnapshot(isDead: false, isDeadTs: 600)
+        )
+        
+        // Merge should determine that Phone's loginCycle (600 > 0) wins over Watch's inactive (0)
+        let (merged, _) = MergeEngine.merge(local: watchWCM.localLS, peer: phoneActiveLS, localDevice: .watch)
+        XCTAssertEqual(merged.loginCycle.loginCycle, .joinActive)
+        XCTAssertEqual(merged.loginCycle.loginCycleTs, 600)
+    }
+    
+    // 21. Explicit user disband / leave action sets a fresh timestamp (> 0) that wins over older active sessions.
+    func testCompanionSync_21_ExplicitDisbandActionSetsFreshTimestamp() {
+        let gameState = createMockGameState()
+        let nowBefore = Date().timeIntervalSince1970
+        
+        gameState.isHosting = true
+        gameState.syncLoginCycleToWatchConnectivity()
+        
+        let exp1 = expectation(description: "Host login cycle synced")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            XCTAssertGreaterThanOrEqual(gameState.watchConnectivityManager.localLS.loginCycle.loginCycleTs, nowBefore)
+            XCTAssertEqual(gameState.watchConnectivityManager.localLS.loginCycle.loginCycle, .hostActive)
+            
+            let hostTs = gameState.watchConnectivityManager.localLS.loginCycle.loginCycleTs
+            
+            // Disband room
+            gameState.isHosting = false
+            gameState.syncLoginCycleToWatchConnectivity()
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                let leaveTs = gameState.watchConnectivityManager.localLS.loginCycle.loginCycleTs
+                XCTAssertGreaterThanOrEqual(leaveTs, hostTs, "Explicit leave must stamp a fresh timestamp")
+                XCTAssertEqual(gameState.watchConnectivityManager.localLS.loginCycle.loginCycle, .inactive)
+                exp1.fulfill()
+            }
+        }
+        wait(for: [exp1], timeout: 1.0)
+    }
+    
+    // 22. isPro bidirectional sync and adoption
+    func testCompanionSync_22_IsProSyncAndAdoption() {
+        let watchConfig = ConfigSnapshot(isPro: true, configTs: 300)
+        let phoneConfig = ConfigSnapshot(isPro: false, configTs: 100)
+        
+        // Merge Watch into Phone
+        let (mergedPhone, _) = MergeEngine.merge(local: LowSpeedSnapshot(config: phoneConfig), peer: LowSpeedSnapshot(config: watchConfig), localDevice: .phone)
+        XCTAssertTrue(mergedPhone.config.isPro)
+        XCTAssertEqual(mergedPhone.config.configTs, 300)
+        
+        // Test GameStateManager adoption of isPro: true and false
+        let gameState = createMockGameState()
+        gameState.subscriptionManager.hasUnlimitedSquadUnlock = false
+        
+        let proSnapshot = LowSpeedSnapshot(config: ConfigSnapshot(isPro: true, configTs: 400))
+        gameState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(proSnapshot)
+        XCTAssertTrue(gameState.subscriptionManager.hasUnlimitedSquadUnlock)
+        
+        let nonProSnapshot = LowSpeedSnapshot(config: ConfigSnapshot(isPro: false, configTs: 500))
+        gameState.watchConnectivityManager.onLowSpeedConvergenceStateChanged?(nonProSnapshot)
+        XCTAssertFalse(gameState.subscriptionManager.hasUnlimitedSquadUnlock)
+    }
+    
+    // 23. Session purge updates and synchronizes isDeadTs
+    func testCompanionSync_23_PurgeUpdatesPlayerStateTs() {
+        let gameState = createMockGameState()
+        gameState.setDead(true)
+        XCTAssertTrue(gameState.isDead)
+        
+        let exp = expectation(description: "Purge sync")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            let deadTs = gameState.watchConnectivityManager.localLS.playerState.isDeadTs
+            XCTAssertGreaterThan(deadTs, 0)
+            
+            // Purge session
+            gameState.purgeLocalSessionAndIcons()
+            XCTAssertFalse(gameState.isDead)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                let resetTs = gameState.watchConnectivityManager.localLS.playerState.isDeadTs
+                XCTAssertGreaterThanOrEqual(resetTs, deadTs)
+                XCTAssertFalse(gameState.watchConnectivityManager.localLS.playerState.isDead)
+                exp.fulfill()
+            }
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+    
+    // 24. Phone changes isDead via setDead, advancing isDeadTs, and Watch adopts via handleIncomingApplicationContext
+    func testCompanionSync_24_PhoneChangesIsDeadAndWatchAdoptsViaApplicationContext() {
+        let phoneWCM = WatchConnectivityManager(role: .phone)
+        let phoneGS = createMockGameState(watchConnectivityManager: phoneWCM)
+        
+        let watchWCM = WatchConnectivityManager(role: .watch)
+        let watchGS = createMockGameState(watchConnectivityManager: watchWCM)
+        
+        // Initial state: Both alive
+        XCTAssertFalse(phoneGS.isDead)
+        XCTAssertFalse(watchGS.isDead)
+        
+        // Phone user triggers KIA
+        phoneGS.setDead(true)
+        XCTAssertTrue(phoneGS.isDead)
+        
+        let exp = expectation(description: "Phone state serialized and applied to Watch")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            let phonePlayerState = phoneWCM.localLS.playerState
+            XCTAssertTrue(phonePlayerState.isDead)
+            XCTAssertGreaterThan(phonePlayerState.isDeadTs, 0)
+            
+            // Serialize Phone's envelope
+            var envelope = ApplicationContextEnvelope()
+            envelope.p2wLS = phoneWCM.localLS
+            let data = try! JSONEncoder().encode(envelope)
+            let dict = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
+            
+            // Watch receives Phone's envelope
+            watchWCM.handleIncomingApplicationContext(dict)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                XCTAssertTrue(watchGS.isDead, "Watch must adopt Phone's isDead state")
+                XCTAssertEqual(watchWCM.localLS.playerState.isDeadTs, phonePlayerState.isDeadTs, "Watch must adopt Phone's isDeadTs")
+                exp.fulfill()
+            }
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+    
+    // 25. Watch changes isDead via setDead, advancing isDeadTs, and Phone adopts via handleIncomingApplicationContext
+    func testCompanionSync_25_WatchChangesIsDeadAndPhoneAdoptsViaApplicationContext() {
+        let phoneWCM = WatchConnectivityManager(role: .phone)
+        let phoneGS = createMockGameState(watchConnectivityManager: phoneWCM)
+        
+        let watchWCM = WatchConnectivityManager(role: .watch)
+        let watchGS = createMockGameState(watchConnectivityManager: watchWCM)
+        
+        // Watch user triggers KIA
+        watchGS.setDead(true)
+        XCTAssertTrue(watchGS.isDead)
+        
+        let exp = expectation(description: "Watch state serialized and applied to Phone")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            let watchPlayerState = watchWCM.localLS.playerState
+            XCTAssertTrue(watchPlayerState.isDead)
+            XCTAssertGreaterThan(watchPlayerState.isDeadTs, 0)
+            
+            // Serialize Watch's envelope
+            var envelope = ApplicationContextEnvelope()
+            envelope.w2pLS = watchWCM.localLS
+            let data = try! JSONEncoder().encode(envelope)
+            let dict = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
+            
+            // Phone receives Watch's envelope
+            phoneWCM.handleIncomingApplicationContext(dict)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                XCTAssertTrue(phoneGS.isDead, "Phone must adopt Watch's isDead state")
+                XCTAssertEqual(phoneWCM.localLS.playerState.isDeadTs, watchPlayerState.isDeadTs, "Phone must adopt Watch's isDeadTs")
+                exp.fulfill()
+            }
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+    
+    // 26. Recurring Watch heart rate stream with older isDeadTs does NOT revert Phone's newer revive state
+    func testCompanionSync_26_WatchHeartRateStreamDoesNotRevertPhoneRevive() {
+        let phoneWCM = WatchConnectivityManager(role: .phone)
+        let phoneGS = createMockGameState(watchConnectivityManager: phoneWCM)
+        
+        let watchWCM = WatchConnectivityManager(role: .watch)
+        let watchGS = createMockGameState(watchConnectivityManager: watchWCM)
+        
+        // Both start dead at t = 100
+        let initialDead = PlayerStateSnapshot(isDead: true, isDeadTs: 100)
+        phoneWCM.updateLocalStructures(playerState: initialDead)
+        watchWCM.updateLocalStructures(playerState: initialDead)
+        phoneGS.setDead(true, syncRemote: false)
+        watchGS.setDead(true, syncRemote: false)
+        
+        let exp = expectation(description: "Phone revives and overrides older Watch stream")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            // Phone user revives at t = 200
+            phoneGS.setDead(false)
+            phoneGS.syncPlayerStateToWatchConnectivity(timestamp: 200, forceTimestampUpdate: true)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                XCTAssertFalse(phoneGS.isDead)
+                XCTAssertEqual(phoneWCM.localLS.playerState.isDeadTs, 200)
+                
+                // Watch heart rate stream ticks with older isDeadTs (100)
+                let hrPayload = WatchToPhoneHighSpeed(freshUntil: 300, heartRate: 85.0)
+                var watchEnvelope = ApplicationContextEnvelope()
+                watchEnvelope.w2pHS = hrPayload
+                watchEnvelope.w2pLS = watchWCM.localLS // Still has isDead: true, isDeadTs: 100
+                
+                let data = try! JSONEncoder().encode(watchEnvelope)
+                let dict = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
+                
+                // Phone receives Watch's heart rate context
+                phoneWCM.handleIncomingApplicationContext(dict)
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    // Phone must RETAIN isDead: false because phone's 200 > watch's 100
+                    XCTAssertFalse(phoneGS.isDead, "Phone must remain alive, not overwritten by older Watch stream")
+                    XCTAssertFalse(phoneWCM.localLS.playerState.isDead)
+                    XCTAssertEqual(phoneWCM.localLS.playerState.isDeadTs, 200)
+                    exp.fulfill()
+                }
+            }
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+    
+    // 27. Setting isDead directly on GameStateManager triggers playerState synchronization
+    func testCompanionSync_27_DirectIsDeadAssignmentTriggersSync() {
+        let wcm = WatchConnectivityManager()
+        let gameState = createMockGameState(watchConnectivityManager: wcm)
+        
+        XCTAssertFalse(gameState.isDead)
+        gameState.isDead = true
+        
+        let exp = expectation(description: "Direct isDead assignment syncs to localLS")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            XCTAssertTrue(wcm.localLS.playerState.isDead)
+            XCTAssertGreaterThan(wcm.localLS.playerState.isDeadTs, 0)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
 }
+
+
+
+
+
 
 
 

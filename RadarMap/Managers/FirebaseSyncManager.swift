@@ -52,7 +52,7 @@ public enum FirebaseSyncError: LocalizedError, Equatable {
     }
 }
 
-public final class FirebaseSyncManager: ObservableObject {
+public final class FirebaseSyncManager: NSObject, ObservableObject {
     @Published public var activeRoom: SquadRoom? {
         didSet {
             if oldValue?.members.count != activeRoom?.members.count {
@@ -69,8 +69,10 @@ public final class FirebaseSyncManager: ObservableObject {
     @Published public var errorMessage: String?
     @Published public var squadMembersArray: [SquadMember] = []
     
-    @Published public var pollingInterval: TimeInterval = AppConstants.Timing.AdaptiveRate.baselineInterval
+    @Published public private(set) var pollingInterval: TimeInterval = AppConstants.Timing.AdaptiveRate.baselineInterval
     @Published public var isWristActive: Bool = true
+    
+    public var onRemoteTelemetryPacketsReceived: (([TelemetryPacket]) -> Void)?
     
     public let networkQualityMonitor = NetworkQualityMonitor()
     private var cancellables = Set<AnyCancellable>()
@@ -85,20 +87,33 @@ public final class FirebaseSyncManager: ObservableObject {
     // Per-member telemetry state tracking for Late Packet Rejection
     private var memberLatestTimestamps: [String: TimeInterval] = [:]
     private var memberLatestSequences: [String: Int64] = [:]
+    private var pendingMemberFetches: Set<String> = []
     
     // Tactical indicators bandwidth-conserving change tracker
     public var lastKnownTacticalUpdatedAt: TimeInterval = 0.0
+    public var lastTacticalPollTimestamp: TimeInterval = 0.0
+    
+    /// Unacknowledged tactical indicators awaiting server ACK (maps indicatorId -> local placement timestamp)
+    public private(set) var unacknowledgedIndicators: [String: TimeInterval] = [:]
     
     private var telemetryPollingTimer: AnyCancellable?
-    public var urlSession: URLSession = URLSession.shared
+    public var urlSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.waitsForConnectivity = false
+        config.timeoutIntervalForRequest = 10.0
+        config.timeoutIntervalForResource = 20.0
+        
+        // Allow concurrent connections to avoid serial head-of-line blocking between uploads and polling
+        config.httpMaximumConnectionsPerHost = 4
+        config.httpShouldUsePipelining = true
+        
+        return URLSession(configuration: config)
+    }()
     
-    // SSE packet accumulator — coalesces per-member delta events into a single batch flush
-    // per runloop turn so activeRoom is only assigned once regardless of how many members
-    // sent updates in the same SSE burst.
-    private var ssePendingPackets: [String: TelemetryPacket] = [:]   // keyed by memberId
-    private var sseFlushPending: Bool = false
-    
-    public init() {
+    override public init() {
+        super.init()
+        
         // Recalculate polling interval only when player count or connection grade changes —
         // not on every coordinate update — preventing spurious Timer restarts.
         Publishers.CombineLatest(
@@ -112,9 +127,18 @@ public final class FirebaseSyncManager: ObservableObject {
         
         // Rebuild squadMembersArray only when member count changes (same guard as above).
         $activeRoom
-            .map { $0.map { Array($0.members.values) } ?? [] }
-            .removeDuplicates { $0.count == $1.count && zip($0, $1).allSatisfy { $0.id == $1.id } }
-            .assign(to: &$squadMembersArray)
+            .map { (room: SquadRoom?) -> [SquadMember] in
+                guard let room = room else { return [] }
+                return Array(room.members.values)
+            }
+            .removeDuplicates { (prev: [SquadMember], next: [SquadMember]) -> Bool in
+                guard prev.count == next.count else { return false }
+                return zip(prev, next).allSatisfy { $0.id == $1.id }
+            }
+            .sink { [weak self] (members: [SquadMember]) in
+                self?.squadMembersArray = members
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Constant Bandwidth Rate Adaptation
@@ -213,18 +237,19 @@ public final class FirebaseSyncManager: ObservableObject {
     /// Returns true if accepted and updates tracking state, false if rejected.
     @discardableResult
     public func validateAndProcessPacket(_ packet: TelemetryPacket) -> Bool {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { [weak self] in
-                self?.validateAndProcessPacket(packet)
-            }
-            return true
+        guard checkAndTrackPacketFreshness(packet) else { return false }
+        
+        let apply = { [weak self] in
+            guard let self = self else { return }
+            self.totalPacketsProcessed += 1
+            self.applyTelemetryToActiveRoom(packet)
         }
         
-        guard checkAndTrackPacketFreshness(packet) else { return false }
-        totalPacketsProcessed += 1
-        
-        // Apply telemetry update to active room member
-        applyTelemetryToActiveRoom(packet)
+        if Thread.isMainThread {
+            apply()
+        } else {
+            DispatchQueue.main.async(execute: apply)
+        }
         return true
     }
     
@@ -232,28 +257,35 @@ public final class FirebaseSyncManager: ObservableObject {
     /// pass to avoid redundant @Published view re-evaluations.
     @discardableResult
     public func validateAndProcessPackets(_ packets: [TelemetryPacket]) -> Int {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { [weak self] in
-                self?.validateAndProcessPackets(packets)
-            }
-            return 0
-        }
+        guard !packets.isEmpty else { return 0 }
         
-        guard var room = activeRoom, !packets.isEmpty else { return 0 }
-        var acceptedCount = 0
-        
+        var acceptedPackets: [TelemetryPacket] = []
         for packet in packets {
             if checkAndTrackPacketFreshness(packet) {
-                acceptedCount += 1
-                updateMember(with: packet, in: &room.members)
+                acceptedPackets.append(packet)
             }
         }
         
-        guard acceptedCount > 0 else { return 0 }
+        guard !acceptedPackets.isEmpty else { return 0 }
         
-        self.totalPacketsProcessed += acceptedCount
-        self.activeRoom = room
-        return acceptedCount
+        let apply = { [weak self] in
+            guard let self = self else { return }
+            let roomId = self.activeRoom?.id ?? acceptedPackets.first?.roomId ?? ""
+            var room = self.activeRoom ?? SquadRoom(id: roomId, hostId: "")
+            for packet in acceptedPackets {
+                self.updateMember(with: packet, in: &room.members)
+            }
+            self.totalPacketsProcessed += acceptedPackets.count
+            self.activeRoom = room
+        }
+        
+        if Thread.isMainThread {
+            apply()
+        } else {
+            DispatchQueue.main.async(execute: apply)
+        }
+        
+        return acceptedPackets.count
     }
     
     private func recordRejection(memberId: String, timestamp: TimeInterval, reason: PacketRejectionReason) {
@@ -289,7 +321,7 @@ public final class FirebaseSyncManager: ObservableObject {
         let isExistingMember = members[packet.memberId] != nil
         var member = members[packet.memberId] ?? SquadMember(
             id: packet.memberId,
-            callsign: packet.memberId,
+            callsign: "",
             latitude: packet.latitude,
             longitude: packet.longitude,
             altitude: packet.altitude,
@@ -320,6 +352,10 @@ public final class FirebaseSyncManager: ObservableObject {
             member.heading = packet.heading
         }
         
+        if isExistingMember && member.lastUpdatedTimestamp > 0 {
+            member.lastAnimationDuration = 0.0
+        }
+        
         member.latitude = packet.latitude
         member.longitude = packet.longitude
         member.altitude = packet.altitude
@@ -336,13 +372,11 @@ public final class FirebaseSyncManager: ObservableObject {
         
         members[packet.memberId] = member
         
-        // Feed into DeadReckoningEngine for 60 FPS smooth coordinate gliding & spring rotation
-        DeadReckoningEngine.shared.updateRemotePlayer(
-            id: member.id,
-            newCoordinate: member.coordinate,
-            newHeading: member.heading,
-            packetTimestamp: packet.timestamp
-        )
+        let effectiveRoomId = !packet.roomId.isEmpty ? packet.roomId : (activeRoom?.id ?? "")
+        let needsCallsign = member.callsign.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || member.callsign == packet.memberId
+        if (!isExistingMember || needsCallsign) && !effectiveRoomId.isEmpty {
+            fetchMemberDetails(roomId: effectiveRoomId, memberId: packet.memberId)
+        }
     }
     
     private func applyTelemetryToActiveRoom(_ packet: TelemetryPacket) {
@@ -352,7 +386,8 @@ public final class FirebaseSyncManager: ObservableObject {
             }
             return
         }
-        guard var room = activeRoom else { return }
+        let roomId = activeRoom?.id ?? packet.roomId
+        var room = activeRoom ?? SquadRoom(id: roomId, hostId: "")
         updateMember(with: packet, in: &room.members)
         self.activeRoom = room
     }
@@ -360,13 +395,25 @@ public final class FirebaseSyncManager: ObservableObject {
     // MARK: - Telemetry Dispatch
     
     public func sendTelemetryPacket(_ packet: TelemetryPacket) {
-        // Validate locally first
-        validateAndProcessPacket(packet)
+        // Local packet is always fresh — apply directly and update tracking state
+        let apply = { [weak self] in
+            guard let self = self else { return }
+            self.applyTelemetryToActiveRoom(packet)
+            self.totalPacketsProcessed += 1
+            if packet.sequenceNumber > 0 {
+                self.memberLatestSequences[packet.memberId] = packet.sequenceNumber
+            }
+            self.memberLatestTimestamps[packet.memberId] = packet.timestamp
+        }
+        if Thread.isMainThread {
+            apply()
+        } else {
+            DispatchQueue.main.async(execute: apply)
+        }
         
         // Broadcast over Firebase Realtime Database
-        guard let url = URL(string: "\(databaseURL)/telemetry/\(packet.roomId)/\(packet.memberId).json\(authParam())") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
+        guard let url = URL(string: "\(databaseURL)/telemetry/\(packet.roomId)/\(packet.memberId).json") else { return }
+        var request = createRequest(url: url, method: "PUT")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let payload = packet.toCompactArray()
@@ -427,7 +474,7 @@ public final class FirebaseSyncManager: ObservableObject {
             seenCallsigns.insert(callsignUpper)
         }
         
-        guard let url = URL(string: "\(databaseURL)/rooms/\(cleanId).json\(authParam())") else {
+        guard let url = URL(string: "\(databaseURL)/rooms/\(cleanId).json") else {
             let err = FirebaseSyncError.networkError("Invalid URL")
             DispatchQueue.main.async {
                 self.errorMessage = err.localizedDescription
@@ -437,7 +484,7 @@ public final class FirebaseSyncManager: ObservableObject {
         }
         
         // 1. Check if room already exists on server
-        urlSession.dataTask(with: url) { [weak self] data, response, error in
+        urlSession.dataTask(with: createRequest(url: url)) { [weak self] data, response, error in
             guard let self = self else { return }
             
             if let error = error {
@@ -462,99 +509,91 @@ public final class FirebaseSyncManager: ObservableObject {
                 return
             }
             
-            // 2. Room does not exist -> Purge old telemetry and tactical data for this room ID, then proceed with creation (PUT)
-            let purgeGroup = DispatchGroup()
+            // 2. Room does not exist -> Create room node first, then initialize telemetry & tactical subrooms
+            var request = self.createRequest(url: url, method: "PUT")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             
-            if let telUrl = URL(string: "\(self.databaseURL)/telemetry/\(cleanId).json\(self.authParam())") {
-                var delTelReq = URLRequest(url: telUrl)
-                delTelReq.httpMethod = "DELETE"
-                purgeGroup.enter()
-                self.urlSession.dataTask(with: delTelReq) { _, _, _ in
-                    purgeGroup.leave()
-                }.resume()
+            let encoder = JSONEncoder()
+            guard let payload = try? encoder.encode(room) else {
+                let err = FirebaseSyncError.networkError("Serialization failure")
+                DispatchQueue.main.async {
+                    self.errorMessage = err.localizedDescription
+                    completion?(.failure(err))
+                }
+                return
             }
+            request.httpBody = payload
             
-            if let tactUrl = URL(string: "\(self.databaseURL)/tactical/\(cleanId).json\(self.authParam())") {
-                var delTactReq = URLRequest(url: tactUrl)
-                delTactReq.httpMethod = "DELETE"
-                purgeGroup.enter()
-                self.urlSession.dataTask(with: delTactReq) { _, _, _ in
-                    purgeGroup.leave()
-                }.resume()
-            }
-            
-            purgeGroup.notify(queue: .global()) {
-                // Initialize clean single-field TTL metadata for telemetry & tactical subrooms
+            self.urlSession.dataTask(with: request) { [weak self] _, response, error in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    let syncError = FirebaseSyncError.networkError(error.localizedDescription)
+                    DispatchQueue.main.async {
+                        self.errorMessage = syncError.localizedDescription
+                        completion?(.failure(syncError))
+                    }
+                    return
+                }
+                
+                guard let httpRes = response as? HTTPURLResponse, (200...299).contains(httpRes.statusCode) else {
+                    let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    let syncError = FirebaseSyncError.networkError("Server returned code \(code)")
+                    DispatchQueue.main.async {
+                        self.errorMessage = syncError.localizedDescription
+                        completion?(.failure(syncError))
+                    }
+                    return
+                }
+                
+                // Room created successfully -> Now initialize subnodes with clean TTL metadata
+                let initGroup = DispatchGroup()
                 let telTtlPayload: [String: Any] = ["expireAt": room.expireAt]
                 let tactTtlPayload: [String: Any] = ["updatedAt": room.createdAt, "expireAt": room.expireAt]
                 
                 if let telData = try? JSONSerialization.data(withJSONObject: telTtlPayload),
-                   let telUrl = URL(string: "\(self.databaseURL)/telemetry/\(cleanId).json\(self.authParam())") {
-                    var putTelReq = URLRequest(url: telUrl)
-                    putTelReq.httpMethod = "PUT"
+                   let telUrl = URL(string: "\(self.databaseURL)/telemetry/\(cleanId).json") {
+                    var putTelReq = self.createRequest(url: telUrl, method: "PUT")
                     putTelReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     putTelReq.httpBody = telData
-                    self.urlSession.dataTask(with: putTelReq).resume()
+                    initGroup.enter()
+                    self.urlSession.dataTask(with: putTelReq) { _, _, _ in
+                        initGroup.leave()
+                    }.resume()
                 }
                 
                 if let tactData = try? JSONSerialization.data(withJSONObject: tactTtlPayload),
-                   let tactUrl = URL(string: "\(self.databaseURL)/tactical/\(cleanId).json\(self.authParam())") {
-                    var putTactReq = URLRequest(url: tactUrl)
-                    putTactReq.httpMethod = "PUT"
+                   let tactMetaUrl = URL(string: "\(self.databaseURL)/tactical/\(cleanId)/meta.json") {
+                    var putTactReq = self.createRequest(url: tactMetaUrl, method: "PUT")
                     putTactReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     putTactReq.httpBody = tactData
-                    self.urlSession.dataTask(with: putTactReq).resume()
+                    initGroup.enter()
+                    self.urlSession.dataTask(with: putTactReq) { _, _, _ in
+                        initGroup.leave()
+                    }.resume()
                 }
                 
-                var request = URLRequest(url: url)
-                request.httpMethod = "PUT"
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                
-                let encoder = JSONEncoder()
-                guard let payload = try? encoder.encode(room) else {
-                    let err = FirebaseSyncError.networkError("Serialization failure")
-                    DispatchQueue.main.async {
-                        self.errorMessage = err.localizedDescription
-                        completion?(.failure(err))
-                    }
-                    return
+                if let tactData = try? JSONSerialization.data(withJSONObject: tactTtlPayload),
+                   let tactLegacyUrl = URL(string: "\(self.databaseURL)/tactical/\(cleanId).json") {
+                    var putTactReq = self.createRequest(url: tactLegacyUrl, method: "PUT")
+                    putTactReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    putTactReq.httpBody = tactData
+                    initGroup.enter()
+                    self.urlSession.dataTask(with: putTactReq) { _, _, _ in
+                        initGroup.leave()
+                    }.resume()
                 }
-                request.httpBody = payload
                 
-                self.urlSession.dataTask(with: request) { [weak self] _, response, error in
-                    guard let self = self else { return }
-                    
-                    if let error = error {
-                        let syncError = FirebaseSyncError.networkError(error.localizedDescription)
-                        DispatchQueue.main.async {
-                            self.errorMessage = syncError.localizedDescription
-                            completion?(.failure(syncError))
-                        }
-                        return
-                    }
-                    
-                    guard let httpRes = response as? HTTPURLResponse, (200...299).contains(httpRes.statusCode) else {
-                        let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-                        let syncError = FirebaseSyncError.networkError("Server returned code \(code)")
-                        DispatchQueue.main.async {
-                            self.errorMessage = syncError.localizedDescription
-                            completion?(.failure(syncError))
-                        }
-                        return
-                    }
-                    
-                    DispatchQueue.main.async {
-                        self.activeRoom = room
-                        self.isConnected = true
-                        self.memberLatestTimestamps.removeAll()
-                        self.memberLatestSequences.removeAll()
-                        self.lastKnownTacticalUpdatedAt = 0.0
-                        DeadReckoningEngine.shared.clearRemoteMembers()
-                        self.startTelemetryPolling(roomId: room.id)
-                        completion?(.success(room))
-                    }
-                }.resume()
-            }
+                initGroup.notify(queue: .main) {
+                    self.activeRoom = room
+                    self.isConnected = true
+                    self.memberLatestTimestamps.removeAll()
+                    self.memberLatestSequences.removeAll()
+                    self.lastKnownTacticalUpdatedAt = 0.0
+                    self.startTelemetryPolling(roomId: room.id)
+                    completion?(.success(room))
+                }
+            }.resume()
         }.resume()
     }
     
@@ -579,7 +618,7 @@ public final class FirebaseSyncManager: ObservableObject {
             return
         }
         
-        guard let url = URL(string: "\(databaseURL)/rooms/\(cleanId).json\(authParam())") else {
+        guard let url = URL(string: "\(databaseURL)/rooms/\(cleanId).json") else {
             let err = FirebaseSyncError.networkError("Invalid URL")
             DispatchQueue.main.async {
                 self.errorMessage = err.localizedDescription
@@ -588,7 +627,7 @@ public final class FirebaseSyncManager: ObservableObject {
             return
         }
         
-        urlSession.dataTask(with: url) { [weak self] data, response, error in
+        urlSession.dataTask(with: createRequest(url: url)) { [weak self] data, response, error in
             guard let self = self else { return }
             
             if let error = error {
@@ -663,7 +702,6 @@ public final class FirebaseSyncManager: ObservableObject {
                 self.memberLatestTimestamps.removeAll()
                 self.memberLatestSequences.removeAll()
                 self.lastKnownTacticalUpdatedAt = 0.0
-                DeadReckoningEngine.shared.clearRemoteMembers()
                 self.startTelemetryPolling(roomId: cleanId)
                 completion?(.success(room))
             }
@@ -676,7 +714,6 @@ public final class FirebaseSyncManager: ObservableObject {
         self.memberLatestTimestamps.removeAll()
         self.memberLatestSequences.removeAll()
         self.lastKnownTacticalUpdatedAt = 0.0
-        DeadReckoningEngine.shared.clearRemoteMembers()
         
         // Sync full room and members from Firebase
         fetchRoomDetails(roomId: room.id)
@@ -689,7 +726,26 @@ public final class FirebaseSyncManager: ObservableObject {
         startTelemetryPolling(roomId: room.id)
     }
     
-    /// Purges all local room tracking state, timestamps, tactical indicator metadata, and remote dead-reckoning players.
+    /// Connects a companion device to an already hosted/joined room without re-publishing or asserting duplicate member.
+    public func connectToExistingRoom(roomId: String, completion: ((Bool) -> Void)? = nil) {
+        let cleanId = roomId.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanId.isEmpty else {
+            completion?(false)
+            return
+        }
+        self.isConnected = true
+        self.memberLatestTimestamps.removeAll()
+        self.memberLatestSequences.removeAll()
+        self.lastKnownTacticalUpdatedAt = 0.0
+        if self.activeRoom == nil || self.activeRoom?.id != cleanId {
+            self.activeRoom = SquadRoom(id: cleanId, hostId: "")
+        }
+        fetchRoomDetails(roomId: cleanId)
+        startTelemetryPolling(roomId: cleanId)
+        completion?(true)
+    }
+    
+    /// Purges all local room tracking state, timestamps, tactical indicator metadata, and remote players.
     public func resetLocalSessionAndIcons() {
         stopTelemetryPolling()
         self.activeRoom = nil
@@ -697,7 +753,8 @@ public final class FirebaseSyncManager: ObservableObject {
         self.memberLatestTimestamps.removeAll()
         self.memberLatestSequences.removeAll()
         self.lastKnownTacticalUpdatedAt = 0.0
-        DeadReckoningEngine.shared.clearRemoteMembers()
+        self.unacknowledgedIndicators.removeAll()
+        self.pendingMemberFetches.removeAll()
     }
     
     public func disbandRoom(roomId: String, completion: ((Bool) -> Void)? = nil) {
@@ -707,41 +764,47 @@ public final class FirebaseSyncManager: ObservableObject {
     public func deleteRoom(roomId: String, completion: ((Bool) -> Void)? = nil) {
         stopTelemetryPolling()
         
-        let group = DispatchGroup()
+        let purgeGroup = DispatchGroup()
         
-        // Delete room node
-        if let roomUrl = URL(string: "\(databaseURL)/rooms/\(roomId).json\(authParam())") {
-            var req = URLRequest(url: roomUrl)
-            req.httpMethod = "DELETE"
-            group.enter()
+        // 1. Delete telemetry node
+        if let telUrl = URL(string: "\(databaseURL)/telemetry/\(roomId).json") {
+            let req = createRequest(url: telUrl, method: "DELETE")
+            purgeGroup.enter()
             urlSession.dataTask(with: req) { _, _, _ in
-                group.leave()
+                purgeGroup.leave()
             }.resume()
         }
         
-        // Delete telemetry node
-        if let telUrl = URL(string: "\(databaseURL)/telemetry/\(roomId).json\(authParam())") {
-            var req = URLRequest(url: telUrl)
-            req.httpMethod = "DELETE"
-            group.enter()
+        // 2. Delete tactical indicators node
+        if let tactUrl = URL(string: "\(databaseURL)/tactical/\(roomId).json") {
+            let req = createRequest(url: tactUrl, method: "DELETE")
+            purgeGroup.enter()
             urlSession.dataTask(with: req) { _, _, _ in
-                group.leave()
+                purgeGroup.leave()
             }.resume()
         }
         
-        // Delete tactical indicators node
-        if let tactUrl = URL(string: "\(databaseURL)/tactical/\(roomId).json\(authParam())") {
-            var req = URLRequest(url: tactUrl)
-            req.httpMethod = "DELETE"
-            group.enter()
-            urlSession.dataTask(with: req) { _, _, _ in
-                group.leave()
-            }.resume()
-        }
-        
-        group.notify(queue: .main) { [weak self] in
-            self?.resetLocalSessionAndIcons()
-            completion?(true)
+        // 3. Delete room node after telemetry & tactical nodes have been purged
+        purgeGroup.notify(queue: .global()) { [weak self] in
+            guard let self = self else {
+                DispatchQueue.main.async { completion?(true) }
+                return
+            }
+            
+            if let roomUrl = URL(string: "\(self.databaseURL)/rooms/\(roomId).json") {
+                let req = self.createRequest(url: roomUrl, method: "DELETE")
+                self.urlSession.dataTask(with: req) { _, _, _ in
+                    DispatchQueue.main.async {
+                        self.resetLocalSessionAndIcons()
+                        completion?(true)
+                    }
+                }.resume()
+            } else {
+                DispatchQueue.main.async {
+                    self.resetLocalSessionAndIcons()
+                    completion?(true)
+                }
+            }
         }
     }
     
@@ -751,9 +814,8 @@ public final class FirebaseSyncManager: ObservableObject {
         let group = DispatchGroup()
         
         // 1. Delete player member entry
-        if let memberUrl = URL(string: "\(databaseURL)/rooms/\(roomId)/members/\(memberId).json\(authParam())") {
-            var req = URLRequest(url: memberUrl)
-            req.httpMethod = "DELETE"
+        if let memberUrl = URL(string: "\(databaseURL)/rooms/\(roomId)/members/\(memberId).json") {
+            let req = createRequest(url: memberUrl, method: "DELETE")
             group.enter()
             urlSession.dataTask(with: req) { _, _, _ in
                 group.leave()
@@ -761,9 +823,8 @@ public final class FirebaseSyncManager: ObservableObject {
         }
         
         // 2. Delete player telemetry entry
-        if let telUrl = URL(string: "\(databaseURL)/telemetry/\(roomId)/\(memberId).json\(authParam())") {
-            var req = URLRequest(url: telUrl)
-            req.httpMethod = "DELETE"
+        if let telUrl = URL(string: "\(databaseURL)/telemetry/\(roomId)/\(memberId).json") {
+            let req = createRequest(url: telUrl, method: "DELETE")
             group.enter()
             urlSession.dataTask(with: req) { _, _, _ in
                 group.leave()
@@ -771,18 +832,19 @@ public final class FirebaseSyncManager: ObservableObject {
         }
         
         // 3. Delete player squad order icons from tactical node
-        if let tactUrl = URL(string: "\(databaseURL)/tactical/\(roomId).json\(authParam())") {
+        if let tactUrl = URL(string: "\(databaseURL)/tactical/\(roomId).json") {
             group.enter()
-            var getReq = URLRequest(url: tactUrl)
-            getReq.httpMethod = "GET"
+            let getReq = createRequest(url: tactUrl, method: "GET")
             urlSession.dataTask(with: getReq) { [weak self] data, _, _ in
                 defer { group.leave() }
                 guard let data = data,
-                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Any]] else { return }
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
                 
                 var deletedAny = false
-                for (indicatorId, indDict) in json {
-                    if indicatorId == "updatedAt" || indicatorId == "expireAt" || indicatorId == "createdAt" || indicatorId == "lastActivityTimestamp" || indicatorId == "ttl" || indicatorId.starts(with: "_") { continue }
+                let sourceDict = (json["indicators"] as? [String: Any]) ?? json
+                for (indicatorId, val) in sourceDict {
+                    if indicatorId == "updatedAt" || indicatorId == "expireAt" || indicatorId == "createdAt" || indicatorId == "lastActivityTimestamp" || indicatorId == "ttl" || indicatorId == "meta" || indicatorId.starts(with: "_") { continue }
+                    guard let indDict = val as? [String: Any] else { continue }
                     let placedBy = indDict["placedByMemberId"] as? String
                     let typeStr = indDict["type"] as? String ?? ""
                     let categoryStr = indDict["category"] as? String ?? ""
@@ -795,9 +857,17 @@ public final class FirebaseSyncManager: ObservableObject {
                     
                     if placedBy == memberId && isSquadOrder {
                         deletedAny = true
-                        if let delUrl = URL(string: "\(self?.databaseURL ?? "")/tactical/\(roomId)/\(indicatorId).json\(self?.authParam() ?? "")") {
-                            var delReq = URLRequest(url: delUrl)
-                            delReq.httpMethod = "DELETE"
+                        // Delete from /indicators
+                        if let delUrl = URL(string: "\(self?.databaseURL ?? "")/tactical/\(roomId)/indicators/\(indicatorId).json") {
+                            let delReq = self?.createRequest(url: delUrl, method: "DELETE") ?? URLRequest(url: delUrl)
+                            group.enter()
+                            self?.urlSession.dataTask(with: delReq) { _, _, _ in
+                                group.leave()
+                            }.resume()
+                        }
+                        // Delete from legacy root
+                        if let delUrl = URL(string: "\(self?.databaseURL ?? "")/tactical/\(roomId)/\(indicatorId).json") {
+                            let delReq = self?.createRequest(url: delUrl, method: "DELETE") ?? URLRequest(url: delUrl)
                             group.enter()
                             self?.urlSession.dataTask(with: delReq) { _, _, _ in
                                 group.leave()
@@ -824,13 +894,18 @@ public final class FirebaseSyncManager: ObservableObject {
     
     public func touchRoomActivity(roomId: String) {
         let now = Date().timeIntervalSince1970
-        guard let url = URL(string: "\(databaseURL)/rooms/\(roomId)/lastActivityTimestamp.json\(authParam())") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
+        guard let url = URL(string: "\(databaseURL)/rooms/\(roomId)/lastActivityTimestamp.json") else { return }
+        var request = createRequest(url: url, method: "PUT")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         guard let data = try? JSONSerialization.data(withJSONObject: now) else { return }
         request.httpBody = data
-        urlSession.dataTask(with: request).resume()
+        urlSession.dataTask(with: request) { _, response, error in
+            if let error = error {
+                print("[FirebaseSyncManager] touchRoomActivity failed: \(error.localizedDescription)")
+            } else if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                print("[FirebaseSyncManager] touchRoomActivity unexpected HTTP \(http.statusCode)")
+            }
+        }.resume()
     }
     
     public func leaveRoom(isHost: Bool = false, memberId: String? = nil) {
@@ -868,13 +943,11 @@ public final class FirebaseSyncManager: ObservableObject {
         memberLatestTimestamps.removeValue(forKey: id)
         memberLatestSequences.removeValue(forKey: id)
         self.activeRoom = room
-        DeadReckoningEngine.shared.removePlayer(id: id)
     }
     
     private func publishMemberToFirebase(roomId: String, member: SquadMember) {
-        guard let url = URL(string: "\(databaseURL)/rooms/\(roomId)/members/\(member.id).json\(authParam())") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
+        guard let url = URL(string: "\(databaseURL)/rooms/\(roomId)/members/\(member.id).json") else { return }
+        var request = createRequest(url: url, method: "PUT")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let payload: [String: Any] = [
@@ -889,12 +962,14 @@ public final class FirebaseSyncManager: ObservableObject {
     
     public func addOrUpdateIndicator(roomId: String, indicator: TacticalIndicator) {
         guard var room = activeRoom, room.id == roomId else { return }
+        unacknowledgedIndicators[indicator.id] = Date().timeIntervalSince1970
         room.indicators[indicator.id] = indicator
         self.activeRoom = room
         publishIndicatorToFirebase(roomId: roomId, indicator: indicator)
     }
     
     public func removeIndicator(roomId: String, indicatorId: String) {
+        unacknowledgedIndicators.removeValue(forKey: indicatorId)
         guard var room = activeRoom, room.id == roomId else { return }
         room.indicators.removeValue(forKey: indicatorId)
         self.activeRoom = room
@@ -902,9 +977,8 @@ public final class FirebaseSyncManager: ObservableObject {
     }
     
     private func publishIndicatorToFirebase(roomId: String, indicator: TacticalIndicator) {
-        guard let url = URL(string: "\(databaseURL)/tactical/\(roomId)/\(indicator.id).json\(authParam())") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
+        guard let url = URL(string: "\(databaseURL)/tactical/\(roomId)/indicators/\(indicator.id).json") else { return }
+        var request = createRequest(url: url, method: "PUT")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         guard let data = try? JSONEncoder().encode(indicator) else { return }
@@ -914,32 +988,67 @@ public final class FirebaseSyncManager: ObservableObject {
     }
     
     private func deleteIndicatorFromFirebase(roomId: String, indicatorId: String) {
-        guard let url = URL(string: "\(databaseURL)/tactical/\(roomId)/\(indicatorId).json\(authParam())") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
+        // Delete from /indicators/{indicatorId}
+        guard let url = URL(string: "\(databaseURL)/tactical/\(roomId)/indicators/\(indicatorId).json") else { return }
+        let request = createRequest(url: url, method: "DELETE")
         urlSession.dataTask(with: request).resume()
+        
+        // Also cleanup legacy root indicator node if present for backward compatibility
+        if let legacyUrl = URL(string: "\(databaseURL)/tactical/\(roomId)/\(indicatorId).json") {
+            let legacyReq = createRequest(url: legacyUrl, method: "DELETE")
+            urlSession.dataTask(with: legacyReq).resume()
+        }
+        
         touchTacticalUpdatedAt(roomId: roomId)
     }
     
     public func touchTacticalUpdatedAt(roomId: String) {
         let now = Date().timeIntervalSince1970
         self.lastKnownTacticalUpdatedAt = now
-        guard let url = URL(string: "\(databaseURL)/tactical/\(roomId)/updatedAt.json\(authParam())") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        guard let data = try? JSONEncoder().encode(now) else { return }
-        request.httpBody = data
-        urlSession.dataTask(with: request).resume()
+        
+        // Write to new /meta/updatedAt
+        if let metaUrl = URL(string: "\(databaseURL)/tactical/\(roomId)/meta/updatedAt.json") {
+            var request = createRequest(url: metaUrl, method: "PUT")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if let data = try? JSONEncoder().encode(now) {
+                request.httpBody = data
+                urlSession.dataTask(with: request).resume()
+            }
+        }
+        
+        // Also write to legacy /updatedAt for backward compatibility
+        if let legacyUrl = URL(string: "\(databaseURL)/tactical/\(roomId)/updatedAt.json") {
+            var req = createRequest(url: legacyUrl, method: "PUT")
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if let data = try? JSONEncoder().encode(now) {
+                req.httpBody = data
+                urlSession.dataTask(with: req).resume()
+            }
+        }
     }
     
     /// Bandwidth-conserving check: queries updatedAt first. Only downloads the full indicator payload when a change is detected.
     public func fetchTacticalIndicatorsIfChanged(roomId: String, force: Bool = false) {
-        guard let updateUrl = URL(string: "\(databaseURL)/tactical/\(roomId)/updatedAt.json\(authParam())") else { return }
+        guard let updateUrl = URL(string: "\(databaseURL)/tactical/\(roomId)/meta/updatedAt.json") else { return }
         
-        urlSession.dataTask(with: updateUrl) { [weak self] data, _, error in
-            guard let self = self, let data = data, error == nil else { return }
-            let remoteUpdatedAt = (try? JSONSerialization.jsonObject(with: data) as? Double) ?? (try? JSONDecoder().decode(Double.self, from: data)) ?? 0.0
+        urlSession.dataTask(with: createRequest(url: updateUrl)) { [weak self] data, _, error in
+            guard let self = self else { return }
+            var remoteUpdatedAt: Double = 0.0
+            if let data = data, error == nil {
+                remoteUpdatedAt = (try? JSONSerialization.jsonObject(with: data) as? Double) ?? (try? JSONDecoder().decode(Double.self, from: data)) ?? 0.0
+            }
+            
+            // Fallback to legacy updatedAt if meta/updatedAt is not found
+            if remoteUpdatedAt == 0.0, let legacyUrl = URL(string: "\(self.databaseURL)/tactical/\(roomId)/updatedAt.json") {
+                self.urlSession.dataTask(with: self.createRequest(url: legacyUrl)) { [weak self] legData, _, _ in
+                    guard let self = self, let legData = legData else { return }
+                    let legTime = (try? JSONSerialization.jsonObject(with: legData) as? Double) ?? (try? JSONDecoder().decode(Double.self, from: legData)) ?? 0.0
+                    if force || (legTime > self.lastKnownTacticalUpdatedAt && legTime > 0) {
+                        self.fetchFullTacticalCollection(roomId: roomId, remoteUpdatedAt: legTime)
+                    }
+                }.resume()
+                return
+            }
             
             if force || (remoteUpdatedAt > self.lastKnownTacticalUpdatedAt && remoteUpdatedAt > 0) {
                 self.fetchFullTacticalCollection(roomId: roomId, remoteUpdatedAt: remoteUpdatedAt)
@@ -948,14 +1057,25 @@ public final class FirebaseSyncManager: ObservableObject {
     }
     
     private func fetchFullTacticalCollection(roomId: String, remoteUpdatedAt: Double) {
-        guard let url = URL(string: "\(databaseURL)/tactical/\(roomId).json\(authParam())") else { return }
+        guard let url = URL(string: "\(databaseURL)/tactical/\(roomId).json") else { return }
         
-        urlSession.dataTask(with: url) { [weak self] data, _, error in
+        urlSession.dataTask(with: createRequest(url: url)) { [weak self] data, _, error in
             guard let self = self, let data = data, error == nil else { return }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 DispatchQueue.main.async {
                     if var current = self.activeRoom {
-                        current.indicators = [:]
+                        let now = Date().timeIntervalSince1970
+                        let ackTimeout = AppConstants.Subscription.tacticalIndicatorAckTimeoutSeconds
+                        var retainedIndicators: [String: TacticalIndicator] = [:]
+                        self.unacknowledgedIndicators = self.unacknowledgedIndicators.filter { id, placedAt in
+                            let isWithinTimeout = (now - placedAt) < ackTimeout
+                            if isWithinTimeout, let localInd = current.indicators[id] {
+                                retainedIndicators[id] = localInd
+                                return true
+                            }
+                            return false
+                        }
+                        current.indicators = retainedIndicators
                         self.activeRoom = current
                     }
                     self.lastKnownTacticalUpdatedAt = max(self.lastKnownTacticalUpdatedAt, remoteUpdatedAt)
@@ -963,20 +1083,44 @@ public final class FirebaseSyncManager: ObservableObject {
                 return
             }
             
-            let metadataKeys: Set<String> = ["createdAt", "expireAt", "lastActivityTimestamp", "ttl", "updatedAt"]
+            let metadataKeys: Set<String> = ["createdAt", "expireAt", "lastActivityTimestamp", "ttl", "updatedAt", "meta"]
             var decodedIndicators: [String: TacticalIndicator] = [:]
-            for (key, val) in json {
+            
+            // Check for new schema: indicators subtree under /tactical/{roomId}/indicators
+            let indicatorsSource = (json["indicators"] as? [String: Any]) ?? json
+            for (key, val) in indicatorsSource {
                 if key.starts(with: "_") || metadataKeys.contains(key) { continue }
                 if let dict = val as? [String: Any],
                    let indData = try? JSONSerialization.data(withJSONObject: dict),
                    let ind = try? JSONDecoder().decode(TacticalIndicator.self, from: indData) {
-                    decodedIndicators[ind.id] = ind
+                    if !ind.isExpired {
+                        decodedIndicators[ind.id] = ind
+                    }
                 }
             }
             
             DispatchQueue.main.async {
                 if var current = self.activeRoom {
-                    current.indicators = decodedIndicators
+                    var mergedIndicators = decodedIndicators
+                    let now = Date().timeIntervalSince1970
+                    let ackTimeout = AppConstants.Subscription.tacticalIndicatorAckTimeoutSeconds
+                    
+                    // 1. Remove all server-confirmed indicators from the pending ACK map (Server ACK)
+                    for id in decodedIndicators.keys {
+                        self.unacknowledgedIndicators.removeValue(forKey: id)
+                    }
+                    
+                    // 2. Retain unacknowledged local indicators as long as they are within the timeout
+                    self.unacknowledgedIndicators = self.unacknowledgedIndicators.filter { id, placedAt in
+                        let isWithinTimeout = (now - placedAt) < ackTimeout
+                        if isWithinTimeout, let localInd = current.indicators[id] {
+                            mergedIndicators[id] = localInd
+                            return true
+                        }
+                        return false
+                    }
+                    
+                    current.indicators = mergedIndicators
                     self.activeRoom = current
                 }
                 self.lastKnownTacticalUpdatedAt = max(self.lastKnownTacticalUpdatedAt, remoteUpdatedAt)
@@ -988,55 +1132,148 @@ public final class FirebaseSyncManager: ObservableObject {
         // Fetch tactical indicators if changed or first load
         fetchTacticalIndicatorsIfChanged(roomId: roomId, force: true)
         
-        guard let url = URL(string: "\(databaseURL)/rooms/\(roomId).json\(authParam())") else { return }
+        guard let url = URL(string: "\(databaseURL)/rooms/\(roomId).json") else { return }
         
-        urlSession.dataTask(with: url) { [weak self] data, _, error in
+        urlSession.dataTask(with: createRequest(url: url)) { [weak self] data, _, error in
             guard let self = self, let data = data, error == nil else { return }
             
             // Try decoding as SquadRoom or parsing members JSON dictionary
             if let decodedRoom = try? JSONDecoder().decode(SquadRoom.self, from: data) {
                 DispatchQueue.main.async {
                     if var current = self.activeRoom {
+                        var updatedMembers: [String: SquadMember] = [:]
                         for (id, remoteMember) in decodedRoom.members {
                             if var existing = current.members[id] {
                                 existing.callsign = remoteMember.callsign
                                 existing.isHost = remoteMember.isHost
-                                current.members[id] = existing
+                                updatedMembers[id] = existing
                             } else {
-                                current.members[id] = remoteMember
+                                updatedMembers[id] = remoteMember
                             }
                         }
+                        if let localId = self.localMemberId, let localMember = current.members[localId], updatedMembers[localId] == nil {
+                            updatedMembers[localId] = localMember
+                        }
+                        current.members = updatedMembers
                         if !decodedRoom.indicators.isEmpty {
                             current.indicators = decodedRoom.indicators
                         }
                         self.activeRoom = current
+                    } else {
+                        self.activeRoom = decodedRoom
                     }
                 }
             } else if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 DispatchQueue.main.async {
+                    var parsedMembers: [String: SquadMember] = [:]
+                    if let membersJson = json["members"] as? [String: [String: Any]] {
+                        for (memberId, memberData) in membersJson {
+                            let callsign = memberData["callsign"] as? String ?? ""
+                            let isHost = memberData["isHost"] as? Bool ?? false
+                            let member = SquadMember(
+                                id: memberId,
+                                callsign: callsign,
+                                latitude: 0.0,
+                                longitude: 0.0,
+                                isHost: isHost
+                            )
+                            parsedMembers[memberId] = member
+                        }
+                    }
                     if var current = self.activeRoom {
-                        if let membersJson = json["members"] as? [String: [String: Any]] {
-                            for (memberId, memberData) in membersJson {
-                                let callsign = memberData["callsign"] as? String ?? memberId
-                                let isHost = memberData["isHost"] as? Bool ?? false
-                                
-                                if var existing = current.members[memberId] {
-                                    existing.callsign = callsign
-                                    existing.isHost = isHost
-                                    current.members[memberId] = existing
-                                } else {
-                                    let member = SquadMember(
-                                        id: memberId,
-                                        callsign: callsign,
-                                        latitude: 0.0,
-                                        longitude: 0.0,
-                                        isHost: isHost
-                                    )
-                                    current.members[memberId] = member
-                                }
+                        var updatedMembers: [String: SquadMember] = [:]
+                        for (id, member) in parsedMembers {
+                            if var existing = current.members[id] {
+                                existing.callsign = member.callsign
+                                existing.isHost = member.isHost
+                                updatedMembers[id] = existing
+                            } else {
+                                updatedMembers[id] = member
                             }
                         }
+                        if let localId = self.localMemberId, let localMember = current.members[localId], updatedMembers[localId] == nil {
+                            updatedMembers[localId] = localMember
+                        }
+                        current.members = updatedMembers
                         self.activeRoom = current
+                    } else {
+                        let hostId = json["hostId"] as? String ?? ""
+                        let capacity = json["maxCapacity"] as? Int ?? AppConstants.Subscription.freeTierMaxCapacity
+                        let hasPin = json["hasPin"] as? Bool ?? false
+                        let pinHash = json["pinHash"] as? String
+                        let createdAt = json["createdAt"] as? Double ?? Date().timeIntervalSince1970
+                        let lastActivity = json["lastActivityTimestamp"] as? Double ?? createdAt
+                        let expireAt = json["expireAt"] as? Double ?? (createdAt + 7 * 86400)
+                        self.activeRoom = SquadRoom(
+                            id: roomId,
+                            hostId: hostId,
+                            maxCapacity: capacity,
+                            hasPin: hasPin,
+                            pinHash: pinHash,
+                            createdAt: createdAt,
+                            lastActivityTimestamp: lastActivity,
+                            expireAt: expireAt,
+                            members: parsedMembers
+                        )
+                    }
+                }
+            }
+        }.resume()
+    }
+    
+    public func fetchMemberDetails(roomId: String, memberId: String) {
+        let cleanRoomId = roomId.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let cleanMemberId = memberId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanRoomId.isEmpty, !cleanMemberId.isEmpty else { return }
+        
+        let fetchKey = "\(cleanRoomId)/\(cleanMemberId)"
+        guard !pendingMemberFetches.contains(fetchKey) else { return }
+        guard let url = URL(string: "\(databaseURL)/rooms/\(cleanRoomId)/members/\(cleanMemberId).json") else { return }
+        
+        pendingMemberFetches.insert(fetchKey)
+        
+        urlSession.dataTask(with: createRequest(url: url)) { [weak self] data, response, error in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                self.pendingMemberFetches.remove(fetchKey)
+            }
+            guard let data = data, error == nil,
+                  let httpRes = response as? HTTPURLResponse, (200...299).contains(httpRes.statusCode) else {
+                return
+            }
+            
+            if let remoteMember = try? JSONDecoder().decode(SquadMember.self, from: data) {
+                DispatchQueue.main.async {
+                    if var currentRoom = self.activeRoom, currentRoom.id == cleanRoomId {
+                        if var existing = currentRoom.members[cleanMemberId] {
+                            existing.callsign = remoteMember.callsign
+                            existing.isHost = remoteMember.isHost
+                            currentRoom.members[cleanMemberId] = existing
+                        } else {
+                            currentRoom.members[cleanMemberId] = remoteMember
+                        }
+                        self.activeRoom = currentRoom
+                    }
+                }
+            } else if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let callsign = json["callsign"] as? String {
+                let isHost = json["isHost"] as? Bool ?? false
+                DispatchQueue.main.async {
+                    if var currentRoom = self.activeRoom, currentRoom.id == cleanRoomId {
+                        if var existing = currentRoom.members[cleanMemberId] {
+                            existing.callsign = callsign
+                            existing.isHost = isHost
+                            currentRoom.members[cleanMemberId] = existing
+                        } else {
+                            currentRoom.members[cleanMemberId] = SquadMember(
+                                id: cleanMemberId,
+                                callsign: callsign,
+                                latitude: 0.0,
+                                longitude: 0.0,
+                                isHost: isHost
+                            )
+                        }
+                        self.activeRoom = currentRoom
                     }
                 }
             }
@@ -1050,7 +1287,7 @@ public final class FirebaseSyncManager: ObservableObject {
             let newInterval = AppConstants.Timing.AdaptiveRate.wristDownPollingInterval
             if abs(self.pollingInterval - newInterval) > AppConstants.Timing.AdaptiveRate.intervalChangeEpsilon {
                 self.pollingInterval = newInterval
-                if let roomId = activeRoom?.id, telemetryPollingTimer != nil {
+                if let roomId = activeRoom?.id {
                     startTelemetryPolling(roomId: roomId)
                 }
             }
@@ -1074,7 +1311,7 @@ public final class FirebaseSyncManager: ObservableObject {
         
         if abs(self.pollingInterval - newInterval) > AppConstants.Timing.AdaptiveRate.intervalChangeEpsilon {
             self.pollingInterval = newInterval
-            if let roomId = activeRoom?.id, telemetryPollingTimer != nil {
+            if let roomId = activeRoom?.id {
                 startTelemetryPolling(roomId: roomId)
             }
         }
@@ -1101,12 +1338,22 @@ public final class FirebaseSyncManager: ObservableObject {
     }
     
     public func startTelemetryPolling(roomId: String) {
-        stopTelemetryPolling()
-        let interval = max(AppConstants.Timing.AdaptiveRate.minimumInterval, pollingInterval)
-        telemetryPollingTimer = Timer.publish(every: interval, on: .main, in: .common)
+        let cleanId = roomId.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanId.isEmpty else { return }
+        
+        telemetryPollingTimer?.cancel()
+        telemetryPollingTimer = nil
+        
+        // Instant initial fetch
+        fetchRemoteTelemetry(roomId: cleanId)
+        fetchTacticalIndicatorsIfChanged(roomId: cleanId, force: true)
+        
+        // Client-driven adaptive polling timer
+        telemetryPollingTimer = Timer.publish(every: pollingInterval, on: .main, in: .common)
             .autoconnect()
+            .receive(on: DispatchQueue.global(qos: .utility))
             .sink { [weak self] _ in
-                self?.fetchRemoteTelemetry(roomId: roomId)
+                self?.fetchRemoteTelemetry(roomId: cleanId)
             }
     }
     
@@ -1153,6 +1400,8 @@ public final class FirebaseSyncManager: ObservableObject {
             return
         }
         
+        guard !activeServerMemberIds.isEmpty else { return }
+        
         guard var currentRoom = activeRoom else { return }
         var roomChanged = false
         let currentMemberIds = Array(currentRoom.members.keys)
@@ -1168,7 +1417,6 @@ public final class FirebaseSyncManager: ObservableObject {
                 currentRoom.members.removeValue(forKey: memberId)
                 memberLatestTimestamps.removeValue(forKey: memberId)
                 memberLatestSequences.removeValue(forKey: memberId)
-                DeadReckoningEngine.shared.removePlayer(id: memberId)
                 roomChanged = true
             }
         }
@@ -1179,12 +1427,16 @@ public final class FirebaseSyncManager: ObservableObject {
     }
     
     public func fetchRemoteTelemetry(roomId: String) {
-        // Change-only check for tactical indicators
-        fetchTacticalIndicatorsIfChanged(roomId: roomId)
+        // Change-only check for tactical indicators throttled to once every 5.0 seconds
+        let now = Date().timeIntervalSince1970
+        if now - lastTacticalPollTimestamp >= 5.0 {
+            lastTacticalPollTimestamp = now
+            fetchTacticalIndicatorsIfChanged(roomId: roomId)
+        }
         
-        guard let url = URL(string: "\(databaseURL)/telemetry/\(roomId).json\(authParam())") else { return }
+        guard let url = URL(string: "\(databaseURL)/telemetry/\(roomId).json") else { return }
         
-        urlSession.dataTask(with: url) { [weak self] data, response, error in
+        urlSession.dataTask(with: createRequest(url: url)) { [weak self] data, response, error in
             guard let self = self, let data = data, error == nil else { return }
             
             if let httpRes = response as? HTTPURLResponse, !(200...299).contains(httpRes.statusCode) {
@@ -1193,132 +1445,50 @@ public final class FirebaseSyncManager: ObservableObject {
             
             let metadataKeys: Set<String> = ["createdAt", "expireAt", "lastActivityTimestamp", "ttl", "updatedAt"]
             let jsonDict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            let serverMemberIds: Set<String> = jsonDict != nil
-                ? Set(jsonDict!.keys.filter { !$0.starts(with: "_") && !metadataKeys.contains($0) })
-                : []
             
             var batchPackets: [TelemetryPacket] = []
+            var activeServerMemberIds = Set<String>()
             if let dict = jsonDict {
                 for (memberId, rawValue) in dict {
                     if memberId.starts(with: "_") || metadataKeys.contains(memberId) {
                         continue
                     }
+                    activeServerMemberIds.insert(memberId)
                     if let localId = self.localMemberId, memberId == localId {
                         continue
                     }
                     if let packet = FirebaseSyncManager.parseTelemetryPacket(memberId: memberId, roomId: roomId, rawValue: rawValue) {
                         batchPackets.append(packet)
+                    }
+                    let needsFetch = self.activeRoom?.members[memberId] == nil ||
+                        (self.activeRoom?.members[memberId]?.callsign.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) ||
+                        self.activeRoom?.members[memberId]?.callsign == memberId
+                    if needsFetch {
+                        self.fetchMemberDetails(roomId: roomId, memberId: memberId)
                     }
                 }
             }
             
             if !batchPackets.isEmpty {
                 self.validateAndProcessPackets(batchPackets)
+                DispatchQueue.main.async {
+                    self.onRemoteTelemetryPacketsReceived?(batchPackets)
+                }
             }
-            
-            // Reconcile remote members: prune any remote member missing from server response
-            self.reconcileRemoteMembers(activeServerMemberIds: serverMemberIds)
+            self.reconcileRemoteMembers(activeServerMemberIds: activeServerMemberIds)
         }.resume()
     }
     
-    // MARK: - Server-Sent Events (SSE) Streaming & Delta Parsing (Method 2)
-    
-    public func flushPendingSSETelemetry() {
-        let batch = Array(self.ssePendingPackets.values)
-        self.ssePendingPackets.removeAll(keepingCapacity: true)
-        self.sseFlushPending = false
-        if !batch.isEmpty {
-            self.validateAndProcessPackets(batch)
-        }
-    }
-
-    /// Processes a single member's raw telemetry object (compact array or JSON dictionary).
-    /// Packets are accumulated into a per-runloop burst buffer and flushed as a single batch
-    /// so `activeRoom` is assigned exactly once per SSE event group (not once per member).
-    public func processRawMemberTelemetry(memberId: String, roomId: String, rawValue: Any) {
-        let metadataKeys: Set<String> = ["createdAt", "expireAt", "lastActivityTimestamp", "ttl", "updatedAt"]
-        if memberId.starts(with: "_") || metadataKeys.contains(memberId) {
-            return
-        }
-        if let localId = localMemberId, memberId == localId {
-            return
-        }
-        guard let packet = FirebaseSyncManager.parseTelemetryPacket(memberId: memberId, roomId: roomId, rawValue: rawValue) else { return }
-        
-        let enqueue = { [weak self] in
-            guard let self = self else { return }
-            self.ssePendingPackets[memberId] = packet
-            
-            guard !self.sseFlushPending else { return }
-            self.sseFlushPending = true
-            
-            DispatchQueue.main.async { [weak self] in
-                self?.flushPendingSSETelemetry()
-            }
-        }
-        
-        if Thread.isMainThread {
-            enqueue()
-        } else {
-            DispatchQueue.main.async(execute: enqueue)
-        }
+    public func createRequest(url: URL, method: String = "GET") -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        applyAuth(to: &request)
+        return request
     }
     
-    /// Parses Server-Sent Events (SSE) stream frames from Firebase Realtime Database.
-    /// Firebase SSE format:
-    ///   event: put / patch / keep-alive
-    ///   data: {"path": "/", "data": { ... }} OR {"path": "/MEMBER_ID", "data": [ ... ]}
-    public func parseSSEEvent(event: String, dataString: String, roomId: String) {
-        guard event == "put" || event == "patch" else { return }
-        guard let data = dataString.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-        
-        let path = json["path"] as? String ?? "/"
-        let payloadData = json["data"]
-        
-        if path == "/" {
-            let metadataKeys: Set<String> = ["createdAt", "expireAt", "lastActivityTimestamp", "ttl", "updatedAt"]
-            let membersDict = payloadData as? [String: Any]
-            let serverMemberIds: Set<String> = membersDict != nil
-                ? Set(membersDict!.keys.filter { !$0.starts(with: "_") && !metadataKeys.contains($0) })
-                : []
-            var batchPackets: [TelemetryPacket] = []
-            if let dict = membersDict {
-                for (memberId, rawValue) in dict {
-                    if memberId.starts(with: "_") || metadataKeys.contains(memberId) {
-                        continue
-                    }
-                    if let localId = self.localMemberId, memberId == localId {
-                        continue
-                    }
-                    if let packet = FirebaseSyncManager.parseTelemetryPacket(memberId: memberId, roomId: roomId, rawValue: rawValue) {
-                        batchPackets.append(packet)
-                    }
-                }
-            }
-            if !batchPackets.isEmpty {
-                validateAndProcessPackets(batchPackets)
-            }
-            reconcileRemoteMembers(activeServerMemberIds: serverMemberIds)
-        } else {
-            let memberId = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            if !memberId.isEmpty {
-                if let rawValue = payloadData, !(rawValue is NSNull) {
-                    processRawMemberTelemetry(memberId: memberId, roomId: roomId, rawValue: rawValue)
-                    flushPendingSSETelemetry()
-                } else if payloadData == nil || payloadData is NSNull {
-                    if let localId = localMemberId, memberId != localId {
-                        removeMember(id: memberId)
-                    }
-                }
-            }
-        }
-    }
-    
-    private func authParam() -> String {
+    public func applyAuth(to request: inout URLRequest) {
         if let token = authToken, !token.isEmpty {
-            return "?auth=\(token)"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        return ""
     }
 }

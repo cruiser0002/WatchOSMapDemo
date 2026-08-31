@@ -19,6 +19,8 @@ public struct SettingsView: View {
     
     // Paywall state
     @State private var showPaywall: Bool = false
+    @State private var showErrorAlert: Bool = false
+    @State private var currentErrorText: String = ""
     
     public init() {}
     
@@ -58,6 +60,8 @@ public struct SettingsView: View {
                 
                 paywallSection
                 
+                hudGuideSection
+                
                 policySection
                 
                 if let room = gameState.firebaseManager.activeRoom {
@@ -76,36 +80,56 @@ public struct SettingsView: View {
                 }
             }
             .onAppear {
-                callsignInput = gameState.myCallsign
-                if let room = gameState.firebaseManager.activeRoom {
-                    squadName = room.name
-                } else if squadName.isEmpty {
-                    squadName = gameState.savedRoomName
-                }
-                if squadPin.isEmpty {
-                    squadPin = gameState.savedPin
+                DispatchQueue.main.async {
+                    callsignInput = gameState.myCallsign
+                    if let room = gameState.firebaseManager.activeRoom {
+                        squadName = room.name
+                    } else if squadName.isEmpty {
+                        squadName = gameState.savedRoomName
+                    }
+                    if squadPin.isEmpty {
+                        squadPin = gameState.savedPin
+                    }
+                    if let error = gameState.errorMessage, !error.isEmpty {
+                        currentErrorText = error
+                        showErrorAlert = true
+                    }
                 }
             }
             .sheet(isPresented: $showPaywall) {
-                PaywallView()
-                    .environmentObject(gameState)
-            }
-            .sheet(isPresented: $gameState.showPaywallSheet) {
-                PaywallView()
-                    .environmentObject(gameState)
+                NavigationStack {
+                    PaywallView()
+                        .environmentObject(gameState)
+                }
             }
             .alert(
                 "Error",
-                isPresented: Binding(
-                    get: { gameState.errorMessage != nil },
-                    set: { if !$0 { gameState.errorMessage = nil } }
-                )
+                isPresented: $showErrorAlert
             ) {
                 Button("OK", role: .cancel) {
-                    gameState.errorMessage = nil
+                    DispatchQueue.main.async {
+                        gameState.errorMessage = nil
+                    }
                 }
             } message: {
-                Text(gameState.errorMessage ?? "An error occurred.")
+                Text(currentErrorText.isEmpty ? (gameState.errorMessage ?? "An error occurred.") : currentErrorText)
+            }
+            .onChange(of: gameState.errorMessage) { _, newError in
+                DispatchQueue.main.async {
+                    if let error = newError, !error.isEmpty {
+                        currentErrorText = error
+                        showErrorAlert = true
+                    } else if newError == nil {
+                        showErrorAlert = false
+                    }
+                }
+            }
+            .onChange(of: showErrorAlert) { _, isShowing in
+                if !isShowing && gameState.errorMessage != nil {
+                    DispatchQueue.main.async {
+                        gameState.errorMessage = nil
+                    }
+                }
             }
             .onChange(of: focusedField) { _, newField in
                 if let field = newField {
@@ -354,6 +378,20 @@ public struct SettingsView: View {
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.yellow)
                     }
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var hudGuideSection: some View {
+        Section {
+            NavigationLink(destination: HUDGuideView()) {
+                HStack(spacing: 8) {
+                    Image(systemName: "book.pages.fill")
+                        .foregroundColor(.green)
+                    Text("HUD Guide")
+                        .font(.system(size: 11, weight: .semibold))
                 }
             }
         }

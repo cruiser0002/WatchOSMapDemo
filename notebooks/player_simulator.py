@@ -242,15 +242,6 @@ class RadarPlayerSimulator:
                 print(f"[ERROR] Room '{self.room_name}' already exists. Use join_room() or choose another room name, or pass overwrite=True.")
                 return False
 
-        # Purge old room, telemetry, and tactical nodes for this room name
-        self._http_request("DELETE", f"rooms/{self.room_name}.json")
-        self._http_request("DELETE", f"telemetry/{self.room_name}.json")
-        self._http_request("DELETE", f"tactical/{self.room_name}.json")
-
-        # Initialize subrooms with clean single-field TTL metadata
-        self._http_request("PUT", f"telemetry/{self.room_name}.json", {"expireAt": expire_at})
-        self._http_request("PUT", f"tactical/{self.room_name}.json", {"updatedAt": now, "expireAt": expire_at})
-
         host_member = {
             "id": self.member_id,
             "callsign": self.callsign,
@@ -273,15 +264,21 @@ class RadarPlayerSimulator:
         if pin_hash:
             room_payload["pinHash"] = pin_hash
 
+        # 1. Create/overwrite room node first so Firebase rules grant authorization for subnodes
         status, resp = self._http_request("PUT", f"rooms/{self.room_name}.json", room_payload)
-        if 200 <= status < 300:
-            self.is_host = True
-            self.is_connected = True
-            print(f"[SUCCESS] Hosted room '{self.room_name}' as '{self.callsign}' (Host: Yes, PIN: {'Enabled' if has_pin else 'None'}, TTL: 7 Days).")
-            return True
-        else:
+        if not (200 <= status < 300):
             print(f"[ERROR] Failed to create room: HTTP {status} - {resp}")
             return False
+
+        # 2. Reset/initialize subrooms with clean TTL metadata
+        self._http_request("PUT", f"telemetry/{self.room_name}.json", {"expireAt": expire_at})
+        self._http_request("PUT", f"tactical/{self.room_name}/meta.json", {"updatedAt": now, "expireAt": expire_at})
+        self._http_request("PUT", f"tactical/{self.room_name}/updatedAt.json", now)
+
+        self.is_host = True
+        self.is_connected = True
+        print(f"[SUCCESS] Hosted room '{self.room_name}' as '{self.callsign}' (Host: Yes, PIN: {'Enabled' if has_pin else 'None'}, TTL: 7 Days).")
+        return True
 
     def join_room(self) -> bool:
         """Joins an existing squad room on Firebase."""
@@ -401,10 +398,10 @@ class RadarPlayerSimulator:
         self._http_request("PUT", f"rooms/{self.room_name}/lastActivityTimestamp.json", now)
 
     # MARK: - Tactical Indicators API
-    def place_tactical_indicator(self, indicator_type: str, lat: float, lon: float, indicator_id: Optional[str] = None) -> Optional[str]:
+    def place_tactical_indicator(self, indicator_type: str, lat: float, lon: float, indicator_id: Optional[str] = None, expires_at: Optional[float] = None) -> Optional[str]:
         """
-        Places a tactical indicator on the server at /tactical/{roomId}/{indicatorId}.json
-        and updates /tactical/{roomId}/updatedAt.json.
+        Places a tactical indicator on the server at /tactical/{roomId}/indicators/{indicatorId}.json
+        and updates /tactical/{roomId}/meta/updatedAt.json.
         """
         ind_id = indicator_id or f"ind_{uuid.uuid4().hex[:8]}"
         now = time.time()
@@ -414,11 +411,15 @@ class RadarPlayerSimulator:
             "latitude": lat,
             "longitude": lon,
             "placedByMemberId": self.member_id,
-            "placedByCallsign": self.callsign,
             "timestamp": now
         }
-        status, _ = self._http_request("PUT", f"tactical/{self.room_name}/{ind_id}.json", payload)
+        if expires_at is not None:
+            payload["expiresAt"] = expires_at
+
+        # Write to /tactical/{room}/indicators/{ind_id}.json
+        status, _ = self._http_request("PUT", f"tactical/{self.room_name}/indicators/{ind_id}.json", payload)
         if 200 <= status < 300:
+            self._http_request("PUT", f"tactical/{self.room_name}/meta/updatedAt.json", now)
             self._http_request("PUT", f"tactical/{self.room_name}/updatedAt.json", now)
             print(f"[TACTICAL] Placed indicator '{indicator_type}' ({ind_id}) at ({lat:.6f}, {lon:.6f}).")
             return ind_id
@@ -426,8 +427,10 @@ class RadarPlayerSimulator:
 
     def remove_tactical_indicator(self, indicator_id: str) -> bool:
         """Deletes a tactical indicator and updates updatedAt timestamp."""
-        status, _ = self._http_request("DELETE", f"tactical/{self.room_name}/{indicator_id}.json")
+        status, _ = self._http_request("DELETE", f"tactical/{self.room_name}/indicators/{indicator_id}.json")
+        self._http_request("DELETE", f"tactical/{self.room_name}/{indicator_id}.json")
         now = time.time()
+        self._http_request("PUT", f"tactical/{self.room_name}/meta/updatedAt.json", now)
         self._http_request("PUT", f"tactical/{self.room_name}/updatedAt.json", now)
         return 200 <= status < 300
 
@@ -436,15 +439,17 @@ class RadarPlayerSimulator:
         now = time.time()
         status, _ = self._http_request("DELETE", f"tactical/{self.room_name}.json")
         expire_at = now + (7.0 * 86400.0)
-        self._http_request("PUT", f"tactical/{self.room_name}.json", {"updatedAt": now, "expireAt": expire_at})
+        self._http_request("PUT", f"tactical/{self.room_name}/meta.json", {"updatedAt": now, "expireAt": expire_at})
+        self._http_request("PUT", f"tactical/{self.room_name}/updatedAt.json", now)
         return 200 <= status < 300
 
     def get_tactical_indicators(self) -> Dict[str, Any]:
         """Fetches active tactical indicators from the server."""
         status, data = self._http_request("GET", f"tactical/{self.room_name}.json")
         if status == 200 and isinstance(data, dict):
-            metadata_keys = {"createdAt", "expireAt", "lastActivityTimestamp", "ttl", "updatedAt"}
-            return {k: v for k, v in data.items() if not k.startswith("_") and k not in metadata_keys and isinstance(v, dict)}
+            metadata_keys = {"createdAt", "expireAt", "lastActivityTimestamp", "ttl", "updatedAt", "meta"}
+            indicators_source = data.get("indicators", data) if isinstance(data.get("indicators"), dict) else data
+            return {k: v for k, v in indicators_source.items() if not k.startswith("_") and k not in metadata_keys and isinstance(v, dict)}
         return {}
 
     # MARK: - Biometrics & Player State
@@ -466,10 +471,10 @@ class RadarPlayerSimulator:
 
         print(f"\n[INFO] Leaving room '{self.room_name}'...")
         if self.is_host:
-            # Host disbanding room: delete room node, telemetry node, and tactical node
-            self._http_request("DELETE", f"rooms/{self.room_name}.json")
+            # Host disbanding room: delete telemetry and tactical nodes first, then room node
             self._http_request("DELETE", f"telemetry/{self.room_name}.json")
             self._http_request("DELETE", f"tactical/{self.room_name}.json")
+            self._http_request("DELETE", f"rooms/{self.room_name}.json")
             print(f"[SUCCESS] Disbanded room '{self.room_name}' and purged all nodes.")
         else:
             # Check remaining members
@@ -480,14 +485,26 @@ class RadarPlayerSimulator:
             self._http_request("DELETE", f"rooms/{self.room_name}/members/{self.member_id}.json")
             self._http_request("DELETE", f"telemetry/{self.room_name}/{self.member_id}.json")
 
+            # Remove player team orders from tactical node
+            t_status, t_data = self._http_request("GET", f"tactical/{self.room_name}.json")
+            if t_status == 200 and isinstance(t_data, dict):
+                ind_source = t_data.get("indicators", t_data) if isinstance(t_data.get("indicators"), dict) else t_data
+                for ind_id, ind_dict in ind_source.items():
+                    if isinstance(ind_dict, dict) and ind_dict.get("placedByMemberId") == self.member_id:
+                        self._http_request("DELETE", f"tactical/{self.room_name}/indicators/{ind_id}.json")
+                        self._http_request("DELETE", f"tactical/{self.room_name}/{ind_id}.json")
+                now = time.time()
+                self._http_request("PUT", f"tactical/{self.room_name}/meta/updatedAt.json", now)
+                self._http_request("PUT", f"tactical/{self.room_name}/updatedAt.json", now)
+
             if not remaining:
-                # Room now empty: delete room node, telemetry node, and tactical node
-                self._http_request("DELETE", f"rooms/{self.room_name}.json")
+                # Room now empty: delete telemetry and tactical nodes first, then room node
                 self._http_request("DELETE", f"telemetry/{self.room_name}.json")
                 self._http_request("DELETE", f"tactical/{self.room_name}.json")
+                self._http_request("DELETE", f"rooms/{self.room_name}.json")
                 print(f"[SUCCESS] Room '{self.room_name}' is now empty. Purged entire room and tactical nodes.")
             else:
-                print(f"[SUCCESS] Removed player '{self.callsign}' from room '{self.room_name}'.")
+                print(f"[SUCCESS] Removed player '{self.callsign}' and associated team orders from room '{self.room_name}'.")
 
         self.is_connected = False
         self.is_running = False

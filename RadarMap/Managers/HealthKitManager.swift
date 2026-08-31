@@ -5,13 +5,15 @@ import HealthKit
 #endif
 
 public final class HealthKitManager: NSObject, ObservableObject {
-    @Published public var currentHeartRate: Double = 0.0
+    @Published public var currentHeartRate: Double = AppConstants.Health.defaultRestingHeartRate
     @Published public var isSessionActive: Bool = false
+    @Published public var isLowPowerPPGEnabled: Bool = true
     
     #if os(watchOS)
     private let healthStore = HKHealthStore()
     private var workoutSession: HKWorkoutSession?
     private var workoutBuilder: HKLiveWorkoutBuilder?
+    private var ppgDutyCycleTimer: AnyCancellable?
     #endif
     
     public override init() {
@@ -52,7 +54,7 @@ public final class HealthKitManager: NSObject, ObservableObject {
         
         let workoutConfig = HKWorkoutConfiguration()
         workoutConfig.activityType = .other
-        workoutConfig.locationType = .outdoor
+        workoutConfig.locationType = .indoor
         
         do {
             workoutSession = try HKWorkoutSession(healthStore: healthStore, configuration: workoutConfig)
@@ -67,6 +69,9 @@ public final class HealthKitManager: NSObject, ObservableObject {
             workoutBuilder?.beginCollection(withStart: startDate) { [weak self] success, error in
                 DispatchQueue.main.async {
                     self?.isSessionActive = success
+                    if success, self?.isLowPowerPPGEnabled == true {
+                        self?.startPPGDutyCycle()
+                    }
                 }
             }
         } catch {
@@ -78,8 +83,69 @@ public final class HealthKitManager: NSObject, ObservableObject {
         #endif
     }
     
+    #if os(watchOS)
+    /// Cycles optical PPG LEDs: active sampling duration followed by sleep duration to reduce optical power by ~80%
+    private func startPPGDutyCycle() {
+        ppgDutyCycleTimer?.cancel()
+        guard isLowPowerPPGEnabled, let session = workoutSession else { return }
+        
+        // Active pulse capture window
+        if session.state == .paused {
+            session.resume()
+        }
+        
+        ppgDutyCycleTimer = Timer.publish(every: AppConstants.Health.lowPowerPPGActiveDurationSeconds, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self = self, let activeSession = self.workoutSession else { return }
+                self.ppgDutyCycleTimer?.cancel()
+                
+                // Sleep optical LEDs
+                if activeSession.state == .running {
+                    activeSession.pause()
+                }
+                
+                // Schedule next wake-up pulse
+                self.ppgDutyCycleTimer = Timer.publish(every: AppConstants.Health.lowPowerPPGSleepDurationSeconds, on: .main, in: .common)
+                    .autoconnect()
+                    .sink { [weak self] _ in
+                        self?.startPPGDutyCycle()
+                    }
+            }
+    }
+    #endif
+    
+    public func pauseLiveHeartRateSession() {
+        #if os(watchOS)
+        ppgDutyCycleTimer?.cancel()
+        ppgDutyCycleTimer = nil
+        guard let session = workoutSession, session.state == .running else { return }
+        session.pause()
+        #else
+        isSessionActive = false
+        #endif
+    }
+    
+    public func resumeLiveHeartRateSession() {
+        #if os(watchOS)
+        guard let session = workoutSession else {
+            startLiveHeartRateSession()
+            return
+        }
+        if isLowPowerPPGEnabled {
+            startPPGDutyCycle()
+        } else if session.state == .paused {
+            session.resume()
+        }
+        #else
+        isSessionActive = true
+        #endif
+    }
+    
     public func stopLiveHeartRateSession() {
         #if os(watchOS)
+        ppgDutyCycleTimer?.cancel()
+        ppgDutyCycleTimer = nil
         guard let session = workoutSession else { return }
         session.end()
         workoutBuilder?.endCollection(withEnd: Date()) { [weak self] _, _ in

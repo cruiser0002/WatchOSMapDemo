@@ -17,6 +17,10 @@ public final class LocationHeadingManager: NSObject, ObservableObject, CLLocatio
     @Published public var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published public var isUpdating: Bool = false
     
+    /// When true (e.g. on Apple Watch when Phone is active and paired), local GPS hardware updates are ignored
+    /// so the shared location is exclusively sourced from the iPhone.
+    @Published public var isRemoteLocationSource: Bool = false
+    
     // MARK: - Speed-Weighted Heading Blending (COG + Compass)
     
     /// Speed threshold below which heading is 100% compass (stationary / looking around).
@@ -91,9 +95,8 @@ public final class LocationHeadingManager: NSObject, ObservableObject, CLLocatio
             hasValidCourse: hasValidCourse
         )
         
-        // Dead-band: suppress publish when heading hasn't meaningfully changed.
-        // Compass hardware fires at up to 60 Hz; without this guard every callback pumps
-        // objectWillChange and the full downstream Combine graph even when stationary.
+        // Secondary dead-band: suppress publish on floating-point noise when heading is near a threshold boundary.
+        // Primary filtering is done at the hardware level via CLLocationManager.headingFilter (AppConstants.Location.headingFilterDegrees).
         let epsilon = 0.1  // degrees
         if abs(newHeading - blendedHeading) > epsilon {
             self.blendedHeading = newHeading
@@ -107,9 +110,9 @@ public final class LocationHeadingManager: NSObject, ObservableObject, CLLocatio
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         locationManager.distanceFilter = kCLDistanceFilterNone
-        locationManager.activityType = .fitness
+        locationManager.activityType = .automotiveNavigation
         #if os(watchOS) || os(iOS)
-        locationManager.headingFilter = kCLHeadingFilterNone
+        locationManager.headingFilter = AppConstants.Location.headingFilterDegrees
         locationManager.headingOrientation = .portrait
         #endif
     }
@@ -144,7 +147,7 @@ public final class LocationHeadingManager: NSObject, ObservableObject, CLLocatio
     
     public func setHighAccuracy(_ high: Bool) {
         locationManager.desiredAccuracy = high ? kCLLocationAccuracyBestForNavigation : kCLLocationAccuracyHundredMeters
-        locationManager.distanceFilter = high ? kCLDistanceFilterNone : 50.0
+        locationManager.distanceFilter = high ? AppConstants.Location.distanceFilterMeters : 50.0
         #if os(watchOS) || os(iOS)
         if CLLocationManager.headingAvailable() {
             if high && isUpdating {

@@ -32,6 +32,7 @@ def create_pbxproj():
     # Watch files
     watch_file_ids = {}
     watch_build_ids = {}
+    ios_watch_build_ids = {}
     idx = 100
     for fname, rel_path in watch_swift_files:
         f_id = f"FF{idx:06d}0000000000000001"
@@ -40,6 +41,10 @@ def create_pbxproj():
         watch_build_ids[fname] = b_id
         file_refs.append(f'\t\t{f_id} /* {fname} */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "{rel_path}"; sourceTree = "<group>"; }};')
         build_files.append(f'\t\t{b_id} /* {fname} in Sources */ = {{isa = PBXBuildFile; fileRef = {f_id} /* {fname} */; }};')
+        if fname != "RadarMapApp.swift":
+            ios_b_id = f"2F{idx:06d}0000000000000002"
+            ios_watch_build_ids[fname] = ios_b_id
+            build_files.append(f'\t\t{ios_b_id} /* {fname} in Sources */ = {{isa = PBXBuildFile; fileRef = {f_id} /* {fname} */; }};')
         idx += 1
         
     watch_info_plist_id = "FF0000010000000000000001"
@@ -52,6 +57,12 @@ def create_pbxproj():
     assets_build_id = "FF0000030000000000000002"
     file_refs.append(f'\t\t{assets_id} /* Assets.xcassets */ = {{isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Resources/Assets.xcassets"; sourceTree = "<group>"; }};')
     build_files.append(f'\t\t{assets_build_id} /* Assets.xcassets in Resources */ = {{isa = PBXBuildFile; fileRef = {assets_id} /* Assets.xcassets */; }};')
+    
+    ios_assets_build_id = "2F0000030000000000000002"
+    build_files.append(f'\t\t{ios_assets_build_id} /* Assets.xcassets in Resources */ = {{isa = PBXBuildFile; fileRef = {assets_id} /* Assets.xcassets */; }};')
+
+    watch_entitlements_id = "FF0000040000000000000001"
+    file_refs.append(f'\t\t{watch_entitlements_id} /* RadarMapWatch.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Resources/RadarMapWatch.entitlements"; sourceTree = "<group>"; }};')
 
     # iOS Companion files
     ios_swift_id = "2F0001000000000000000001"
@@ -61,6 +72,9 @@ def create_pbxproj():
     
     ios_info_plist_id = "2F0000010000000000000001"
     file_refs.append(f'\t\t{ios_info_plist_id} /* Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Resources/Info.plist"; sourceTree = "<group>"; }};')
+
+    ios_entitlements_id = "2F0000020000000000000001"
+    file_refs.append(f'\t\t{ios_entitlements_id} /* RadarMapCompanion.entitlements */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Resources/RadarMapCompanion.entitlements"; sourceTree = "<group>"; }};')
     
     # Embed watch app build file
     embed_watch_build_id = "2A0000020000000000000001"
@@ -70,18 +84,31 @@ def create_pbxproj():
     watch_group_children.append(f'\t\t\t\t{watch_info_plist_id} /* Info.plist */,')
     watch_group_children.append(f'\t\t\t\t{google_plist_id} /* GoogleService-Info.plist */,')
     watch_group_children.append(f'\t\t\t\t{assets_id} /* Assets.xcassets */,')
+    watch_group_children.append(f'\t\t\t\t{watch_entitlements_id} /* RadarMapWatch.entitlements */,')
     
     ios_group_children = [
         f'\t\t\t\t{ios_swift_id} /* RadarMapCompanionApp.swift */,',
         f'\t\t\t\t{ios_info_plist_id} /* Info.plist */,',
+        f'\t\t\t\t{ios_entitlements_id} /* RadarMapCompanion.entitlements */,',
     ]
 
     watch_sources_build_phase = [f'\t\t\t\t{watch_build_ids[fname]} /* {fname} in Sources */,' for fname, _ in watch_swift_files]
     watch_resources_build_phase = [f'\t\t\t\t{assets_build_id} /* Assets.xcassets in Resources */,']
     
     ios_sources_build_phase = [f'\t\t\t\t{ios_swift_build_id} /* RadarMapCompanionApp.swift in Sources */,']
+    ios_resources_build_phase = [f'\t\t\t\t{ios_assets_build_id} /* Assets.xcassets in Resources */,']
+    for fname, _ in watch_swift_files:
+        if fname != "RadarMapApp.swift":
+            ios_sources_build_phase.append(f'\t\t\t\t{ios_watch_build_ids[fname]} /* {fname} in Sources */,')
 
     team_id = "2VUBR7QPFD"
+    
+    build_num_file = os.path.join(project_dir, "build_number.txt")
+    if os.path.exists(build_num_file):
+        with open(build_num_file, "r") as bf:
+            build_num = bf.read().strip() or "1"
+    else:
+        build_num = "1"
 
     pbxproj_content = f"""// !$*UTF8*$!
 {{
@@ -184,6 +211,7 @@ def create_pbxproj():
 \t\t\tbuildPhases = (
 \t\t\t\t2A0000090000000000000001 /* Sources */,
 \t\t\t\t2A0000050000000000000001 /* Frameworks */,
+\t\t\t\t2A0000100000000000000001 /* Resources */,
 \t\t\t\t2A0000040000000000000001 /* Embed Watch Content */,
 \t\t\t);
 \t\t\tbuildRules = (
@@ -200,6 +228,7 @@ def create_pbxproj():
 \t\t\tisa = PBXNativeTarget;
 \t\t\tbuildConfigurationList = 1A0000070000000000000001 /* Build configuration list for PBXNativeTarget "RadarMap Watch App" */;
 \t\t\tbuildPhases = (
+\t\t\t\t1A0000000000000000000001 /* Increment Build Number */,
 \t\t\t\t1A0000080000000000000001 /* Sources */,
 \t\t\t\t1A0000020000000000000001 /* Frameworks */,
 \t\t\t\t1A0000100000000000000001 /* Resources */,
@@ -263,7 +292,37 @@ def create_pbxproj():
 \t\t\t);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
 \t\t}};
+\t\t2A0000100000000000000001 /* Resources */ = {{
+\t\t\tisa = PBXResourcesBuildPhase;
+\t\t\tbuildActionMask = 2147483647;
+\t\t\tfiles = (
+{chr(10).join(ios_resources_build_phase)}
+\t\t\t);
+\t\t\trunOnlyForDeploymentPostprocessing = 0;
+\t\t}};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		1A0000000000000000000001 /* Increment Build Number */ = {{
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Increment Build Number";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "bash \\"$SRCROOT/scripts/increment_build.sh\\"";
+		}};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 \t\t2A0000090000000000000001 /* Sources */ = {{
@@ -362,8 +421,9 @@ def create_pbxproj():
 \t\t\tisa = XCBuildConfiguration;
 \t\t\tbuildSettings = {{
 \t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+\t\t\t\tCODE_SIGN_ENTITLEMENTS = RadarMapCompanion/Resources/RadarMapCompanion.entitlements;
 \t\t\t\tCODE_SIGN_STYLE = Automatic;
-\t\t\t\tCURRENT_PROJECT_VERSION = 1;
+\t\t\t\tCURRENT_PROJECT_VERSION = {build_num};
 \t\t\t\tDEVELOPMENT_TEAM = {team_id};
 \t\t\t\tGENERATE_INFOPLIST_FILE = NO;
 \t\t\t\tINFOPLIST_FILE = RadarMapCompanion/Resources/Info.plist;
@@ -387,8 +447,9 @@ def create_pbxproj():
 \t\t\tisa = XCBuildConfiguration;
 \t\t\tbuildSettings = {{
 \t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+\t\t\t\tCODE_SIGN_ENTITLEMENTS = RadarMapCompanion/Resources/RadarMapCompanion.entitlements;
 \t\t\t\tCODE_SIGN_STYLE = Automatic;
-\t\t\t\tCURRENT_PROJECT_VERSION = 1;
+\t\t\t\tCURRENT_PROJECT_VERSION = {build_num};
 \t\t\t\tDEVELOPMENT_TEAM = {team_id};
 \t\t\t\tGENERATE_INFOPLIST_FILE = NO;
 \t\t\t\tINFOPLIST_FILE = RadarMapCompanion/Resources/Info.plist;
@@ -413,8 +474,9 @@ def create_pbxproj():
 \t\t\tbuildSettings = {{
 \t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 \t\t\t\tASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+\t\t\t\tCODE_SIGN_ENTITLEMENTS = RadarMap/Resources/RadarMapWatch.entitlements;
 \t\t\t\tCODE_SIGN_STYLE = Automatic;
-\t\t\t\tCURRENT_PROJECT_VERSION = 1;
+\t\t\t\tCURRENT_PROJECT_VERSION = {build_num};
 \t\t\t\tDEVELOPMENT_TEAM = {team_id};
 \t\t\t\tGENERATE_INFOPLIST_FILE = NO;
 \t\t\t\tINFOPLIST_FILE = RadarMap/Resources/Info.plist;
@@ -440,8 +502,9 @@ def create_pbxproj():
 \t\t\tbuildSettings = {{
 \t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 \t\t\t\tASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+\t\t\t\tCODE_SIGN_ENTITLEMENTS = RadarMap/Resources/RadarMapWatch.entitlements;
 \t\t\t\tCODE_SIGN_STYLE = Automatic;
-\t\t\t\tCURRENT_PROJECT_VERSION = 1;
+\t\t\t\tCURRENT_PROJECT_VERSION = {build_num};
 \t\t\t\tDEVELOPMENT_TEAM = {team_id};
 \t\t\t\tGENERATE_INFOPLIST_FILE = NO;
 \t\t\t\tINFOPLIST_FILE = RadarMap/Resources/Info.plist;

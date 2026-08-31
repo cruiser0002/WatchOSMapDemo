@@ -25,7 +25,7 @@ public struct TacticalIndicatorMenuView: View {
                     categorySelectionList
                 }
             }
-            .navigationTitle(selectedCategory?.title ?? "Tactical Tree")
+            .navigationTitle(selectedCategory?.title ?? "Tactical Orders")
             #if os(watchOS) || os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -62,59 +62,34 @@ public struct TacticalIndicatorMenuView: View {
     
     private var categorySelectionList: some View {
         VStack(spacing: 8) {
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    selectedCategory = .squadOrder
+            ForEach(TacticalIndicatorCategory.allCases) { category in
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedCategory = category
+                    }
+                }) {
+                    HStack {
+                        Text(category.title)
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white)
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.gray)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Color.white.opacity(0.08))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(themeColor.opacity(0.3), lineWidth: 1)
+                    )
                 }
-            }) {
-                HStack {
-                    Text("Team Orders")
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.gray)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(Color.white.opacity(0.08))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(themeColor.opacity(0.3), lineWidth: 1)
-                )
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    selectedCategory = .enemyIndicator
-                }
-            }) {
-                HStack {
-                    Text("Tac Indicators")
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.gray)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(Color.white.opacity(0.08))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(themeColor.opacity(0.3), lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
             
             Spacer()
         }
@@ -125,15 +100,14 @@ public struct TacticalIndicatorMenuView: View {
     // MARK: - Level 2: Specific Indicators
     
     private func indicatorOptionsList(for category: TacticalIndicatorCategory) -> some View {
-        let types: [TacticalIndicatorType] = category == .squadOrder
-            ? [.watchHere, .goHere, .attackHere, .protectHere]
-            : [.infantry, .lightVehicle, .heavyVehicle]
+        let types = TacticalIndicatorType.allCases.filter { $0.category == category }
         
         return ScrollView {
             VStack(spacing: 6) {
                 ForEach(types) { type in
                     Button(action: {
                         gameState.selectIndicatorForPlacement(type)
+                        dismiss()
                     }) {
                         HStack {
                             Text(type.title)

@@ -1,12 +1,19 @@
 import SwiftUI
 import CoreLocation
+#if canImport(UIKit)
+import UIKit
+#endif
 
-public struct SimpleRadarMapView: View {
+/// Concentric range-ring radar view for low-power OLED tactical display.
+public struct RadarMapView: View {
     @EnvironmentObject var gameState: GameStateManager
     
     // Pan State
     @State private var dragOffset: CGSize = .zero
     @State private var baseScale: Double = AppConstants.UI.RadarScale.defaultScaleMeters
+    #if !os(watchOS)
+    @State private var pinchInitialScale: Double? = nil
+    #endif
     
     public init() {}
     
@@ -19,7 +26,7 @@ public struct SimpleRadarMapView: View {
             let size = geometry.size
             let screenCenter = CGPoint(x: size.width / 2, y: size.height / 2)
             let meMember = gameState.localPlayerMember
-            let centerCoord = gameState.currentMapCenter ?? meMember.coordinate
+            let centerCoord = gameState.mapCenterLockState == .locked ? meMember.coordinate : (gameState.currentMapCenter ?? meMember.coordinate)
             let centerPoint = CGPoint(
                 x: screenCenter.x + dragOffset.width,
                 y: screenCenter.y + dragOffset.height
@@ -28,7 +35,8 @@ public struct SimpleRadarMapView: View {
             
             let metersPerDegreeLat = AppConstants.Location.metersPerDegreeLatitude
             let metersPerDegreeLon = metersPerDegreeLat * cos(centerCoord.latitude * AppConstants.Location.degreesToRadiansFactor)
-            let pointsPerMeter = gameState.radarScaleMeters > 0 ? Double(maxRadius) / gameState.radarScaleMeters : 1.0
+            let outerRadarDistanceMeters = gameState.radarScaleMeters * 4.0
+            let pointsPerMeter = outerRadarDistanceMeters > 0 ? Double(maxRadius) / outerRadarDistanceMeters : 1.0
             
             ZStack {
                 // Maximum Black Background for OLED Power Conservation
@@ -37,7 +45,7 @@ public struct SimpleRadarMapView: View {
                 
                 let themeColor = gameState.radarColorTheme.color
                 
-                // Concentric Tactical Range Rings (Red or Green)
+                // Concentric Tactical Range Rings (Red or Green - 4 clicks of minor scale)
                 ForEach(AppConstants.UI.RadarScale.rangeRingRatios, id: \.self) { ratio in
                     Circle()
                         .stroke(
@@ -70,26 +78,28 @@ public struct SimpleRadarMapView: View {
                 }
                 .stroke(themeColor, lineWidth: 2.0)
                 
-                // Range Ring Distance Labels
-                ForEach(AppConstants.UI.RadarScale.rangeRingRatios, id: \.self) { ratio in
-                    let ringDist = gameState.radarScaleMeters * ratio
+                // Range Ring Distance Labels (4 clicks of minor scale: 1x, 2x, 3x, 4x)
+                ForEach(Array(AppConstants.UI.RadarScale.rangeRingRatios.enumerated()), id: \.offset) { index, ratio in
+                    let clickCount = Double(index + 1)
+                    let ringDist = gameState.radarScaleMeters * clickCount
+                    let diagOffset = (maxRadius * ratio) * cos(.pi / 4.0)
                     Text(AppConstants.UI.ScaleRuler.formatDistance(meters: ringDist))
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .font(.system(size: AppConstants.UI.HUD.rulerFontSize, weight: .bold, design: .monospaced))
                         .foregroundColor(themeColor.opacity(0.8))
-                        .position(x: screenCenter.x + 18, y: screenCenter.y - (maxRadius * ratio) + 6)
+                        .position(x: screenCenter.x + diagOffset, y: screenCenter.y - diagOffset)
                 }
                 
-                // Active Remote Squad Members (Smooth 60 FPS Gliding & Rotation)
+                // Active Remote Squad Members
                 ForEach(otherSquadMembers, id: \.id) { member in
-                    let smoothed = gameState.deadReckoningEngine.smoothedMember(for: member)
-                    let offset = pointOffset(for: smoothed.coordinate, centerCoord: centerCoord, metersPerDegreeLat: metersPerDegreeLat, metersPerDegreeLon: metersPerDegreeLon, pointsPerMeter: pointsPerMeter)
+                    let offset = pointOffset(for: member.coordinate, centerCoord: centerCoord, metersPerDegreeLat: metersPerDegreeLat, metersPerDegreeLon: metersPerDegreeLon, pointsPerMeter: pointsPerMeter)
                     
                     MemberAnnotationView(
-                        member: smoothed,
+                        member: member,
                         isMe: false,
                         radarColor: themeColor
                     )
-                        .position(x: centerPoint.x + offset.x, y: centerPoint.y + offset.y)
+                    .position(x: centerPoint.x + offset.x, y: centerPoint.y + offset.y)
+                    .animation(.linear(duration: 0), value: member.coordinate)
                 }
                 
                 // Active Tactical Indicators (Orders & Enemy markers)
@@ -104,11 +114,9 @@ public struct SimpleRadarMapView: View {
                         }
                     )
                     .position(x: centerPoint.x + offset.x, y: centerPoint.y + offset.y)
-                    .transaction { $0.animation = nil }
-                    .zIndex(5)
                 }
                 
-                // Local Player "Me" Indicator (Always live position + live COD blended heading)
+                // Local Player "Me" (Always pinned to local player offset / center)
                 let meOffset = pointOffset(for: meMember.coordinate, centerCoord: centerCoord, metersPerDegreeLat: metersPerDegreeLat, metersPerDegreeLon: metersPerDegreeLon, pointsPerMeter: pointsPerMeter)
                 MemberAnnotationView(
                     member: meMember,
@@ -118,6 +126,56 @@ public struct SimpleRadarMapView: View {
                 .position(x: centerPoint.x + meOffset.x, y: centerPoint.y + meOffset.y)
             }
             .contentShape(Rectangle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { value in
+                        dragOffset = value.translation
+                    }
+                    .onEnded { value in
+                        if abs(value.translation.width) < 4 && abs(value.translation.height) < 4 {
+                            return
+                        }
+                        let endCenter = coordinate(
+                            for: CGPoint(x: screenCenter.x - value.translation.width, y: screenCenter.y - value.translation.height),
+                            centerScreenPoint: screenCenter,
+                            centerCoord: centerCoord,
+                            metersPerDegreeLat: metersPerDegreeLat,
+                            metersPerDegreeLon: metersPerDegreeLon,
+                            pointsPerMeter: pointsPerMeter
+                        )
+                        gameState.sendMapAction(.pan(to: endCenter, userCoord: meMember.coordinate))
+                        dragOffset = .zero
+                    }
+            )
+            #if !os(watchOS)
+            .simultaneousGesture(
+                MagnifyGesture()
+                    .onChanged { value in
+                        if pinchInitialScale == nil {
+                            pinchInitialScale = gameState.radarScaleMeters
+                        }
+                        guard let initial = pinchInitialScale, value.magnification > 0 else { return }
+                        // Pinching in (magnification > 1) zooms IN (smaller scaleMeters)
+                        // Pinching out (magnification < 1) zooms OUT (larger scaleMeters)
+                        let newScale = initial / Double(value.magnification)
+                        let clamped = min(max(newScale, AppConstants.UI.RadarScale.minScaleMeters), AppConstants.UI.RadarScale.maxiOSScaleMeters)
+                        gameState.radarScaleMeters = clamped
+                    }
+                    .onEnded { value in
+                        guard let initial = pinchInitialScale, value.magnification > 0 else {
+                            pinchInitialScale = nil
+                            return
+                        }
+                        let newScale = initial / Double(value.magnification)
+                        let clamped = min(max(newScale, AppConstants.UI.RadarScale.minScaleMeters), AppConstants.UI.RadarScale.maxiOSScaleMeters)
+                        let snapped = AppConstants.UI.RadarScale.snapToDiscreteScale(clamped)
+                        pinchInitialScale = nil
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                            gameState.sendMapAction(.setScale(meters: snapped))
+                        }
+                    }
+            )
+            #endif
             .onTapGesture { location in
                 if gameState.pendingIndicatorPlacementType != nil {
                     let tappedCoord = coordinate(
@@ -131,71 +189,28 @@ public struct SimpleRadarMapView: View {
                     gameState.placeTacticalIndicator(at: tappedCoord)
                 }
             }
-            .gesture(
-                DragGesture(minimumDistance: 15)
-                    .onChanged { value in
-                        dragOffset = value.translation
-                    }
-                    .onEnded { value in
-                        let dist = hypot(value.translation.width, value.translation.height)
-                        guard dist >= 15 else {
-                            withAnimation(.easeOut(duration: 0.15)) {
-                                dragOffset = .zero
-                            }
-                            return
-                        }
-                        let endCenter = coordinate(
-                            for: CGPoint(x: screenCenter.x - value.translation.width, y: screenCenter.y - value.translation.height),
-                            centerScreenPoint: screenCenter,
-                            centerCoord: centerCoord,
-                            metersPerDegreeLat: metersPerDegreeLat,
-                            metersPerDegreeLon: metersPerDegreeLon,
-                            pointsPerMeter: pointsPerMeter
-                        )
-                        
-                        // Flat-earth distance check — reuses the scale factors already
-                        // computed above; far cheaper than two CLLocation Vincenty allocations
-                        // for a simple 10m threshold comparison.
-                        let dLat = endCenter.latitude - meMember.coordinate.latitude
-                        let dLon = endCenter.longitude - meMember.coordinate.longitude
-                        let approxMeters = hypot(dLat * metersPerDegreeLat, dLon * metersPerDegreeLon)
-                        if approxMeters > 10.0 {
-                            gameState.currentMapCenter = endCenter
-                        } else {
-                            gameState.currentMapCenter = nil
-                        }
-                        dragOffset = .zero
-                    }
-            )
-            #if !os(watchOS)
-            .gesture(
-                MagnificationGesture()
-                    .onChanged { scale in
-                        let newScale = baseScale / scale
-                        gameState.radarScaleMeters = min(max(newScale, AppConstants.UI.RadarScale.minScaleMeters), AppConstants.UI.RadarScale.maxiOSScaleMeters)
-                    }
-                    .onEnded { _ in
-                        baseScale = gameState.radarScaleMeters
-                    }
-            )
-            #endif
-            .onChange(of: gameState.radarCenterTrigger) { _, _ in
+            .onChange(of: gameState.mapStateMachine.scaleMeters) { _, newScale in
+                baseScale = newScale
+            }
+            .onChange(of: gameState.mapStateMachine.centerTriggerCount) { _, _ in
                 withAnimation(.easeInOut(duration: 0.25)) {
                     dragOffset = .zero
-                    baseScale = gameState.radarScaleMeters
+                    baseScale = gameState.mapStateMachine.scaleMeters
                 }
             }
-            .onChange(of: gameState.currentMapCenter == nil) { _, isCentered in
-                if isCentered {
+            .onChange(of: gameState.mapStateMachine.trackingState) { _, state in
+                if state.isLocked {
                     withAnimation(.easeInOut(duration: 0.25)) {
                         dragOffset = .zero
                     }
                 }
             }
             .onAppear {
-                baseScale = gameState.radarScaleMeters
+                baseScale = gameState.mapStateMachine.scaleMeters
+                if gameState.mapStateMachine.trackingState.isLocked {
+                    dragOffset = .zero
+                }
             }
-            .focusable(false)
         }
     }
     
@@ -213,20 +228,23 @@ public struct SimpleRadarMapView: View {
     }
     
     private func coordinate(for screenPoint: CGPoint, centerScreenPoint: CGPoint, centerCoord: CLLocationCoordinate2D, metersPerDegreeLat: Double, metersPerDegreeLon: Double, pointsPerMeter: Double) -> CLLocationCoordinate2D {
-        let dx = screenPoint.x - centerScreenPoint.x
-        let dy = screenPoint.y - centerScreenPoint.y
+        guard pointsPerMeter > 0, metersPerDegreeLat > 0, metersPerDegreeLon > 0 else { return centerCoord }
         
-        guard pointsPerMeter > 0 else { return centerCoord }
+        let dx = Double(screenPoint.x - centerScreenPoint.x)
+        let dy = Double(screenPoint.y - centerScreenPoint.y)
         
-        let metersEast = Double(dx) / pointsPerMeter
-        let metersNorth = Double(-dy) / pointsPerMeter
+        let metersEast = dx / pointsPerMeter
+        let metersNorth = -dy / pointsPerMeter
         
-        let latDelta = metersNorth / metersPerDegreeLat
-        let lonDelta = metersEast / metersPerDegreeLon
+        let dLat = metersNorth / metersPerDegreeLat
+        let dLon = metersEast / metersPerDegreeLon
         
         return CLLocationCoordinate2D(
-            latitude: centerCoord.latitude + latDelta,
-            longitude: centerCoord.longitude + lonDelta
+            latitude: centerCoord.latitude + dLat,
+            longitude: centerCoord.longitude + dLon
         )
     }
 }
+
+/// Alias for backward compatibility
+public typealias SimpleRadarMapView = RadarMapView

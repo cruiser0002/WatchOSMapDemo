@@ -1,6 +1,6 @@
 import SwiftUI
 
-#if os(watchOS) || os(iOS)
+#if os(watchOS)
 @main
 struct RadarMapApp: App {
     @StateObject private var gameState = GameStateManager()

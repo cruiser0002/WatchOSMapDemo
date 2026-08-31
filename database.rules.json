@@ -6,21 +6,43 @@
       ".indexOn": ["expireAt", "createdAt", "lastActivityTimestamp"],
       "$roomId": {
         ".read": true,
-        ".write": true,
-        ".validate": "$roomId.length > 0 && $roomId.length <= 64"
+        ".write": "data.exists() || newData.child('id').exists() || newData.child('createdAt').exists()",
+        ".validate": "$roomId.length > 0 && $roomId.length <= 64",
+        "members": {
+          ".read": "root.child('rooms').child($roomId).exists()",
+          ".write": "root.child('rooms').child($roomId).exists()"
+        }
       }
     },
     "telemetry": {
       "$roomId": {
-        ".read": true,
-        ".write": "root.child('rooms').child($roomId).exists()"
+        ".read": "root.child('rooms').child($roomId).exists()",
+        ".write": "!newData.exists() || (root.child('rooms').child($roomId).exists() && newData.hasChild('expireAt'))",
+        "$memberId": {
+          ".write": "root.child('rooms').child($roomId).child('members').child($memberId).exists() || !newData.exists()"
+        }
       }
     },
     "tactical": {
       "$roomId": {
-        ".read": true,
-        ".write": "root.child('rooms').child($roomId).exists()"
+        ".read": "root.child('rooms').child($roomId).exists()",
+        ".write": "!newData.exists() || (root.child('rooms').child($roomId).exists() && (newData.hasChild('meta') || newData.hasChild('updatedAt')))",
+        "meta": {
+          ".write": "root.child('rooms').child($roomId).exists()"
+        },
+        "updatedAt": {
+          ".write": "root.child('rooms').child($roomId).exists()"
+        },
+        "indicators": {
+          "$indicatorId": {
+            ".write": "!newData.exists() || (root.child('rooms').child($roomId).exists() && newData.child('placedByMemberId').exists() && root.child('rooms').child($roomId).child('members').child(newData.child('placedByMemberId').val()).exists())"
+          }
+        },
+        "$legacyIndicatorId": {
+          ".write": "!newData.exists() || (root.child('rooms').child($roomId).exists() && newData.child('placedByMemberId').exists() && root.child('rooms').child($roomId).child('members').child(newData.child('placedByMemberId').val()).exists())"
+        }
       }
     }
   }
 }
+

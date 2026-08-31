@@ -25,10 +25,7 @@ extension SquadMember {
 
 extension TacticalMapStyle {
     public var iconName: String {
-        switch self {
-        case .standard: return "map"
-        case .radar: return "scope"
-        }
+        return "map"
     }
     
     @available(watchOS 10.0, *)
@@ -51,6 +48,8 @@ extension TacticalIndicatorCategory {
             return "star.fill"
         case .enemyIndicator:
             return "skull.fill"
+        case .environment:
+            return "leaf.fill"
         }
     }
 }
@@ -58,23 +57,81 @@ extension TacticalIndicatorCategory {
 // MARK: - TacticalIndicatorType Presentation Extensions
 
 extension TacticalIndicatorType {
-    /// SF Symbol descriptor
+    /// SF Symbol descriptor (system name or custom asset catalog symbol name)
     public var iconName: String {
         switch self {
+        // Squad Orders
         case .watchHere:
             return "eye.fill"
         case .goHere:
-            return "arrowtriangle.down"
+            return "arrowshape.down"
         case .attackHere:
             return "bolt"
         case .protectHere:
             return "shield"
+        case .flag:
+            return "flag.fill"
+        case .point1:
+            return "1.circle"
+        case .point2:
+            return "2.circle"
+        case .point3:
+            return "3.circle"
+        case .point4:
+            return "4.circle"
+        case .point5:
+            return "5.circle"
+        case .point6:
+            return "6.circle"
+        case .point7:
+            return "7.circle"
+        case .point8:
+            return "8.circle"
+        case .point9:
+            return "9.circle"
+        case .point10:
+            return "10.circle"
+            
+        // Enemy Indicators
         case .infantry:
-            return "shield.fill"
-        case .lightVehicle:
-            return "car.side.fill"
-        case .heavyVehicle:
-            return "shield.lefthalf.filled"
+            return "tactical.helmet"
+        case .vehicle:
+            return "tactical.humvee"
+        case .armor:
+            return "tactical.tank"
+        case .drone:
+            return "tactical.drone"
+            
+        // Environment Indicators
+        case .water:
+            return "water.waves"
+        case .hazard:
+            return "exclamationmark.triangle.fill"
+        case .fire:
+            return "flame.fill"
+        case .snow:
+            return "snowflake"
+        case .closure:
+            return "minus.circle.fill"
+        case .emergency:
+            return "sos.circle.fill"
+        }
+    }
+    
+    public var isCustomSymbol: Bool {
+        switch self {
+        case .infantry, .vehicle, .armor, .drone:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    public var iconImage: Image {
+        if isCustomSymbol {
+            return Image(iconName).renderingMode(.template)
+        } else {
+            return Image(systemName: iconName).renderingMode(.template)
         }
     }
 }

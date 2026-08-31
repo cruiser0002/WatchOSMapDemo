@@ -28,7 +28,7 @@ public final class SubscriptionManager: ObservableObject {
     @Published public var localizedPrice: String = AppConstants.Subscription.lifetimePriceString
     @Published public var promotionalPriceMessage: String? = AppConstants.Subscription.promotionalPriceMessage
     @Published public var productTitle: String = "Squad Leader Lifetime"
-    @Published public var productDescription: String = "Create squads of unlimited operators and place tactical map indicators."
+    @Published public var productDescription: String = ">4 players and place tactical map indicators."
     @Published public var errorMessage: String? = nil
     @Published public var purchaseSuccess: Bool = false
     @Published public var activeEngineMode: PurchaseEngineMode = .storeKit2
@@ -59,7 +59,7 @@ public final class SubscriptionManager: ObservableObject {
     // MARK: - Paywall Check
     
     /// Free users can create a room of <= 4 people.
-    /// Creating a room with > 4 people requires the $9.99 lifetime unlock.
+    /// Creating a room with > 4 people requires the $29.99 lifetime unlock.
     /// Joining a room of any size is always free.
     public func canCreateRoom(withCapacity capacity: Int) -> Bool {
         if capacity <= SubscriptionManager.freeTierMaxCapacity {

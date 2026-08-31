@@ -6,6 +6,25 @@ import SwiftUI
 /// Modify these values to adjust application behaviors, thresholds, intervals, and UI scales.
 public enum AppConstants {
     
+    // MARK: - Version & Build Tracking
+    public enum Version {
+        public static var appVersion: String {
+            AppBuildVersion.marketingVersion
+        }
+        public static var buildNumber: String {
+            "\(AppBuildVersion.buildNumber)"
+        }
+        public static var formattedVersionString: String {
+            AppBuildVersion.formatted
+        }
+    }
+    
+    // MARK: - Debug Configuration
+    public enum Debug {
+        /// Set to true to display the 8-character text-based debug field in the HUD.
+        public static let isDebugFieldEnabled: Bool = true
+    }
+    
     // MARK: - Local Storage & UserDefaults Keys
     public enum Storage {
         public static let userCallsignKey = "user_callsign"
@@ -53,7 +72,7 @@ public enum AppConstants {
         public static let offeringID = "default"
         public static let packageID = "$rc_lifetime"
         public static let productID = "com.radarmap.watch.pro"
-        public static let lifetimePriceString = "$9.99"
+        public static let lifetimePriceString = "$29.99"
         public static let promotionalPriceMessage: String? = nil
         
         /// Squad player capacity limits
@@ -64,6 +83,7 @@ public enum AppConstants {
         public static let maxEnemyIndicatorsCount: Int = 20
         public static let enemyIndicatorFadeDurationSeconds: TimeInterval = 300.0 // 5 minutes
         public static let indicatorHoldToDeleteDurationSeconds: TimeInterval = 1.2
+        public static var tacticalIndicatorAckTimeoutSeconds: TimeInterval = 10.0
         
         /// Mock purchase simulated sleep delays
         public static let mockPurchaseSleepNanoseconds: UInt64 = 1_000_000_000
@@ -118,10 +138,15 @@ public enum AppConstants {
         
         /// Default map delta zoom span
         public static let defaultMapSpanDelta: Double = 0.005
+        
+        /// Unified threshold in meters to determine whether map center tracks local player or custom panned location
+        public static let centerThresholdMeters: Double = 10.0
     }
     
     // MARK: - HealthKit & Biometrics
     public enum Health {
+        /// Default initial player vital status (alive / active, not dead)
+        public static let defaultIsDead: Bool = false
         public static let defaultRestingHeartRate: Double = 75.0 // BPM
         public static let flatlineHeartRate: Double = 0.0        // BPM for KIA / Downed
         public static let referenceBpm: Double = 100.0           // Reference BPM for scanning sweep (BPM / 100 equation)
@@ -134,6 +159,10 @@ public enum AppConstants {
         /// Heart rate pulse clamping bounds for visual pulse animation
         public static let minPulseBpm: Double = 30.0
         public static let maxPulseBpm: Double = 220.0
+        
+        /// Low power PPG pulse sampling constants
+        public static let lowPowerPPGActiveDurationSeconds: TimeInterval = 4.0 // Active optical LED sampling duration
+        public static let lowPowerPPGSleepDurationSeconds: TimeInterval = 16.0  // Optical LED sleep duration (80% power saving)
         
         /// Heart rate stress level thresholds (BPM)
         public enum Zones {
@@ -250,29 +279,25 @@ public enum AppConstants {
         
         /// Radar scale distance bounds (meters)
         public enum RadarScale {
-            public static let defaultScaleMeters: Double = 100.0
-            public static let minScaleMeters: Double = 10.0
-            public static let maxWatchScaleMeters: Double = 5000.0
-            public static let maxiOSScaleMeters: Double = 20000.0
+            public static let defaultScaleMeters: Double = 25.0
+            public static let minScaleMeters: Double = 1.0
+            public static let maxWatchScaleMeters: Double = 2500.0
+            public static let maxiOSScaleMeters: Double = 2500.0
             public static let crownStepMeters: Double = 10.0
             
-            /// Discrete whole-number division scale ladder (multiples of 5, 10, 25, 50, 75, 100, 200, 250, 500, 1000 per division)
+            /// Minor scale zoom ladder: decades of [1, 2.5, 5] from 1m to km scale (2.5km)
             public static let discreteScales: [Double] = [
-                20.0,
-                40.0,
+                1.0,
+                2.5,
+                5.0,
+                10.0,
+                25.0,
+                50.0,
                 100.0,
-                200.0,
-                300.0,
-                400.0,
+                250.0,
                 500.0,
-                800.0,
                 1000.0,
-                1500.0,
-                2000.0,
-                2500.0,
-                3000.0,
-                4000.0,
-                5000.0
+                2500.0
             ]
             
             /// Finds the closest discrete scale index for a given scale in meters
@@ -295,7 +320,21 @@ public enum AppConstants {
                 return discreteScales[index]
             }
             
-            /// Finds the crown index (reversed direction: 0 = max zoomed out 5000m, max index = max zoomed in 20m)
+            /// Returns the next discrete scale zooming IN (smaller meter distance).
+            public static func stepZoomIn(from scaleMeters: Double) -> Double {
+                let currentIndex = nearestScaleIndex(for: scaleMeters)
+                let targetIndex = max(0, currentIndex - 1)
+                return discreteScales[targetIndex]
+            }
+            
+            /// Returns the next discrete scale zooming OUT (larger meter distance).
+            public static func stepZoomOut(from scaleMeters: Double) -> Double {
+                let currentIndex = nearestScaleIndex(for: scaleMeters)
+                let targetIndex = min(discreteScales.count - 1, currentIndex + 1)
+                return discreteScales[targetIndex]
+            }
+            
+            /// Finds the crown index (reversed direction: 0 = max zoomed out 2500m, max index = max zoomed in 1m)
             public static func crownIndex(for scaleMeters: Double) -> Double {
                 let nearestIdx = nearestScaleIndex(for: scaleMeters)
                 return Double((discreteScales.count - 1) - nearestIdx)
@@ -325,25 +364,51 @@ public enum AppConstants {
             public static let referenceScreenAspectRatio: Double = 2.16 // Height / Width for iPhone
             #endif
             
-            /// Range ring fractional ratios from center
+            /// Range ring fractional ratios from center (4 clicks of minor scale: 1x, 2x, 3x, 4x)
             public static let rangeRingRatios: [Double] = [0.25, 0.50, 0.75, 1.0]
             
-            /// Converts a radar scale in meters to an equivalent MapKit coordinate span latitude delta.
+            /// Converts a minor radar scale in meters to an equivalent MapKit coordinate span latitude delta (outer radius = 4 minor clicks).
             public static func mapSpanDelta(forRadarScaleMeters radarScaleMeters: Double) -> Double {
-                let visibleMetersLat = (radarScaleMeters / radarRadiusRatio) * referenceScreenAspectRatio
+                let outerRadarMeters = radarScaleMeters * 4.0
+                let visibleMetersLat = (outerRadarMeters / radarRadiusRatio) * referenceScreenAspectRatio
                 return visibleMetersLat / AppConstants.Location.metersPerDegreeLatitude
             }
             
-            /// Converts a MapKit coordinate span latitude delta to an equivalent clamped radar scale in meters.
+            /// Converts a MapKit coordinate span latitude delta to an equivalent clamped minor radar scale in meters.
             public static func radarScaleMeters(forMapSpanDelta mapSpanDelta: Double) -> Double {
                 let visibleMetersLat = (mapSpanDelta * AppConstants.Location.metersPerDegreeLatitude) / referenceScreenAspectRatio
-                let calculatedMeters = visibleMetersLat * radarRadiusRatio
+                let outerRadarMeters = visibleMetersLat * radarRadiusRatio
+                let minorScaleMeters = outerRadarMeters / 4.0
                 #if os(watchOS)
                 let maxScale = maxWatchScaleMeters
                 #else
                 let maxScale = maxiOSScaleMeters
                 #endif
-                return min(max(calculatedMeters, minScaleMeters), maxScale)
+                return min(max(minorScaleMeters, minScaleMeters), maxScale)
+            }
+            
+            /// Converts a MapKit MapCamera distance (altitude) to an equivalent clamped minor radar scale in meters.
+            public static func scaleMeters(forCameraDistance distance: Double) -> Double {
+                // MapKit MapCamera altitude calculation inverse:
+                // distance = visibleMetersLat / (2 * tan(15 deg))
+                // visibleMetersLat = distance * 2 * tan(15 deg)
+                let visibleMetersLat = distance * (2.0 * tan(15.0 * .pi / 180.0))
+                let outerRadarMeters = (visibleMetersLat / referenceScreenAspectRatio) * radarRadiusRatio
+                let minorScaleMeters = outerRadarMeters / 4.0
+                #if os(watchOS)
+                let maxScale = maxWatchScaleMeters
+                #else
+                let maxScale = maxiOSScaleMeters
+                #endif
+                return min(max(minorScaleMeters, minScaleMeters), maxScale)
+            }
+            
+            /// Converts a minor radar scale in meters to an equivalent MapKit MapCamera distance (altitude).
+            public static func cameraDistance(forScale scaleMeters: Double) -> Double {
+                let outerRadarMeters = scaleMeters * 4.0
+                let visibleMetersLat = (outerRadarMeters / radarRadiusRatio) * referenceScreenAspectRatio
+                let cameraAltitude = visibleMetersLat / (2.0 * tan(15.0 * .pi / 180.0))
+                return max(10.0, cameraAltitude)
             }
         }
         
@@ -356,46 +421,120 @@ public enum AppConstants {
             public static let referenceScreenHeight: Double = 800.0
             #endif
             
-            /// Meter thresholds for discrete scale labels
-            public static let thresholds: [(maxMeters: Double, label: String)] = [
-                (18.0, "10m"),
-                (38.0, "25m"),
-                (75.0, "50m"),
-                (150.0, "100m"),
-                (350.0, "250m"),
-                (750.0, "500m"),
-                (1500.0, "1km"),
-                (3500.0, "2.5km"),
-                (7500.0, "5km"),
-                (15000.0, "10km")
-            ]
-            
-            /// Formats a distance in meters to a discrete ruler label based on defined thresholds.
-            public static func formatRulerDistance(meters: Double) -> String {
-                for threshold in thresholds {
-                    if meters < threshold.maxMeters {
-                        return threshold.label
-                    }
-                }
-                return "\(max(1, Int(round(meters / AppConstants.Location.metersPerKilometer))))km"
+            /// Formats a distance in meters to a discrete ruler label (total distance across the 2-click tactical ruler: 2 * minor scale).
+            public static func formatRulerDistance(minorScaleMeters: Double) -> String {
+                let snappedMinor = RadarScale.snapToDiscreteScale(minorScaleMeters)
+                return formatDistance(meters: snappedMinor * 2.0)
             }
             
-            /// Formats a distance in meters for display (e.g. range ring distance label).
+            /// Formats a live/continuous distance in meters directly to ruler label without pre-snapping (2 * minor scale).
+            public static func formatLiveRulerDistance(minorScaleMeters: Double) -> String {
+                return formatDistance(meters: minorScaleMeters * 2.0)
+            }
+            
+            /// Formats a distance in meters for display (e.g. range ring distance label or ruler label).
             public static func formatDistance(meters: Double) -> String {
                 if meters < AppConstants.Location.metersPerKilometer {
-                    return "\(Int(round(meters)))m"
+                    if meters.truncatingRemainder(dividingBy: 1.0) == 0 {
+                        return "\(Int(meters))m"
+                    } else {
+                        return String(format: "%.1fm", meters)
+                    }
                 } else {
                     let km = meters / AppConstants.Location.metersPerKilometer
-                    return String(format: "%.1fkm", km)
+                    if km.truncatingRemainder(dividingBy: 1.0) == 0 {
+                        return "\(Int(km))km"
+                    } else {
+                        return String(format: "%.1fkm", km)
+                    }
                 }
             }
         }
         
-        /// Tactical HUD overlay corner padding constants to place controls just outside radar rings
+        /// Tactical HUD overlay sizing, hitboxes, and symmetrical corner padding
         public enum HUD {
+            #if os(watchOS)
             public static let horizontalPadding: CGFloat = 12.0
             public static let topPadding: CGFloat = 14.0
             public static let bottomPadding: CGFloat = 12.0
+            
+            public static let circleButtonDiameter: CGFloat = 26.0
+            public static let circleIconFontSize: CGFloat = 12.0
+            public static let rectButtonWidth: CGFloat = 48.0
+            public static let rectButtonHeight: CGFloat = 24.0
+            public static let rectCornerRadius: CGFloat = 5.0
+            public static let ekgWaveSize: CGSize = CGSize(width: 32.0, height: 14.0)
+            public static let ekgLineWidth: CGFloat = 1.3
+            public static let ekgHaloSize: CGFloat = 5.5
+            public static let ekgDotSize: CGFloat = 2.2
+            public static let rulerNotchMajorWidth: CGFloat = 1.5
+            public static let rulerNotchMajorHeight: CGFloat = 5.0
+            public static let rulerNotchMinorWidth: CGFloat = 1.0
+            public static let rulerNotchMinorHeight: CGFloat = 3.5
+            public static let rulerBarWidth: CGFloat = 19.0
+            public static let rulerBarHeight: CGFloat = 1.0
+            public static let rulerFontSize: CGFloat = 8.0
+            
+            public static let circleHitboxSize: CGSize = CGSize(width: 48.0, height: 48.0)
+            public static let rectHitboxSize: CGSize = CGSize(width: 52.0, height: 48.0)
+            #else
+            // iPhone UI: 2x element sizing with generous hitboxes & symmetrical safe-area centering
+            public static let horizontalPadding: CGFloat = 24.0
+            public static let topPadding: CGFloat = 56.0
+            public static let bottomPadding: CGFloat = 34.0
+            
+            public static let circleButtonDiameter: CGFloat = 52.0
+            public static let circleIconFontSize: CGFloat = 22.0
+            public static let rectButtonWidth: CGFloat = 96.0
+            public static let rectButtonHeight: CGFloat = 48.0
+            public static let rectCornerRadius: CGFloat = 10.0
+            public static let ekgWaveSize: CGSize = CGSize(width: 64.0, height: 28.0)
+            public static let ekgLineWidth: CGFloat = 2.2
+            public static let ekgHaloSize: CGFloat = 9.0
+            public static let ekgDotSize: CGFloat = 4.0
+            public static let rulerNotchMajorWidth: CGFloat = 2.5
+            public static let rulerNotchMajorHeight: CGFloat = 8.0
+            public static let rulerNotchMinorWidth: CGFloat = 2.0
+            public static let rulerNotchMinorHeight: CGFloat = 6.0
+            public static let rulerBarWidth: CGFloat = 40.0
+            public static let rulerBarHeight: CGFloat = 2.0
+            public static let rulerFontSize: CGFloat = 13.0
+            
+            public static let circleHitboxSize: CGSize = CGSize(width: 68.0, height: 68.0)
+            public static let rectHitboxSize: CGSize = CGSize(width: 112.0, height: 64.0)
+            #endif
+        }
+        
+        /// Tactical Map Markers sizing and label styling
+        public enum MapMarkers {
+            #if os(watchOS)
+            public static let playerIconSize: CGFloat = 18.0
+            public static let leaderIconSize: CGFloat = 22.0
+            public static let deadXIconSize: CGFloat = 18.0
+            public static let markerFrameSize: CGFloat = 26.0
+            public static let pulseCoreSize: CGFloat = 6.0
+            
+            public static let tacticalIndicatorIconSize: CGFloat = 16.0
+            public static let tacticalIndicatorRingSize: CGFloat = 24.0
+            
+            public static let callsignFontSize: CGFloat = 7.0
+            public static let callsignYOffset: CGFloat = 20.0
+            public static let orderCallsignYOffset: CGFloat = 20.0
+            #else
+            // iPhone UI: Scaled tactical icons, frames, and legible callsign tags (38pt player icon)
+            public static let playerIconSize: CGFloat = 30.0
+            public static let leaderIconSize: CGFloat = 30.0
+            public static let deadXIconSize: CGFloat = 22.0
+            public static let markerFrameSize: CGFloat = 32.0
+            public static let pulseCoreSize: CGFloat = 10.0
+            
+            public static let tacticalIndicatorIconSize: CGFloat = 30.0
+            public static let tacticalIndicatorRingSize: CGFloat = 32.0
+            
+            public static let callsignFontSize: CGFloat = 10.0
+            public static let callsignYOffset: CGFloat = 30.0
+            public static let orderCallsignYOffset: CGFloat = 30.0
+            #endif
         }
         
         /// Tactical Vector Shapes Geometry Calculation Constants
@@ -442,28 +581,14 @@ public enum AppConstants {
     
     // MARK: - Watch Connectivity Sync
     public enum WatchConnectivity {
-        public static let messageTypeKey = "wc_msg_type"
-        public static let memberIdKey = "wc_member_id"
-        public static let callsignKey = "wc_callsign"
-        public static let roomNameKey = "wc_room_name"
-        public static let pinKey = "wc_pin"
-        public static let themeKey = "wc_theme"
-        public static let actionTypeKey = "wc_action_type"
-        public static let isHostingKey = "wc_is_hosting"
-        public static let timestampKey = "wc_timestamp"
+        public static let p2wHSKey = "p2w_hs"
+        public static let w2pHSKey = "w2p_hs"
+        public static let p2wLSKey = "p2w_ls"
+        public static let w2pLSKey = "w2p_ls"
         
-        public enum MessageType {
-            public static let configSync = "config_sync"
-            public static let roomAction = "room_action"
-            public static let identityHandshake = "identity_handshake"
-        }
-        
-        public enum ActionType {
-            public static let host = "host"
-            public static let join = "join"
-            public static let leave = "leave"
-            public static let disband = "disband"
-        }
+        public static let defaultHighSpeedCadenceSeconds: TimeInterval = 1.0
+        public static let defaultFreshnessTTLSeconds: TimeInterval = 3.0
     }
 }
+
 

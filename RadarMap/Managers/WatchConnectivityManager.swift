@@ -4,36 +4,6 @@ import Combine
 import WatchConnectivity
 #endif
 
-/// Payloads for room actions passed over WatchConnectivity
-public struct WCRoomAction {
-    public let actionType: String
-    public let roomName: String
-    public let pin: String?
-    public let isHosting: Bool
-    
-    public init(actionType: String, roomName: String, pin: String?, isHosting: Bool) {
-        self.actionType = actionType
-        self.roomName = roomName
-        self.pin = pin
-        self.isHosting = isHosting
-    }
-}
-
-/// Payload for configuration values passed over WatchConnectivity
-public struct WCConfigPayload {
-    public let callsign: String?
-    public let roomName: String?
-    public let pin: String?
-    public let theme: String?
-    
-    public init(callsign: String? = nil, roomName: String? = nil, pin: String? = nil, theme: String? = nil) {
-        self.callsign = callsign
-        self.roomName = roomName
-        self.pin = pin
-        self.theme = theme
-    }
-}
-
 public final class WatchConnectivityManager: NSObject, ObservableObject {
     public static let shared = WatchConnectivityManager()
     
@@ -42,13 +12,59 @@ public final class WatchConnectivityManager: NSObject, ObservableObject {
     @Published public var isPaired: Bool = false
     @Published public var isWatchAppInstalled: Bool = false
     
-    // Callbacks to GameStateManager
-    public var onConfigReceived: ((WCConfigPayload) -> Void)?
-    public var onRoomActionReceived: ((WCRoomAction) -> Void)?
-    public var onIdentityReceived: ((String) -> Void)?
+    public let localRole: DeviceRole
     
-    public override init() {
+    // Outbound low-speed snapshot owned by this device
+    public private(set) var localLS: LowSpeedSnapshot
+    
+    // Last-known counterpart low-speed snapshot received
+    public private(set) var peerLS: LowSpeedSnapshot?
+    
+    // Last-known counterpart high-speed payload
+    public private(set) var latestRemoteHSFreshUntil: TimeInterval = 0
+    public private(set) var latestRemoteTelemetryJson: String = "{}"
+    public private(set) var latestRemoteHeartRate: Double = 75.0
+    
+    // Convergence tracking
+    public private(set) var isRollingSync: Bool = false
+    private var rollingTimer: AnyCancellable?
+    
+    // Serialization queue for WCSession context updates to prevent concurrent partially-merged publishes
+    private let contextQueue = DispatchQueue(label: "com.radarmap.watchconnectivity.queue")
+    
+    // High-level callbacks to GameStateManager
+    public var onLowSpeedConvergenceStateChanged: ((LowSpeedSnapshot) -> Void)?
+    public var onHighSpeedTelemetryReceived: ((_ telemetryJson: String, _ freshUntil: TimeInterval) -> Void)?
+    public var onHighSpeedHeartRateReceived: ((_ hr: Double, _ freshUntil: TimeInterval) -> Void)?
+    public var onReachabilityChanged: ((Bool) -> Void)?
+    
+    // Persistence keys
+    private let localLSPersistenceKey = "wc_local_ls_snapshot"
+    private let peerLSPersistenceKey = "wc_peer_ls_snapshot"
+    
+    public init(role: DeviceRole? = nil) {
+        #if os(watchOS)
+        let defaultRole: DeviceRole = .watch
+        #else
+        let defaultRole: DeviceRole = .phone
+        #endif
+        self.localRole = role ?? defaultRole
+        
+        // Load persisted snapshots if available
+        if let data = UserDefaults.standard.data(forKey: localLSPersistenceKey),
+           let saved = try? JSONDecoder().decode(LowSpeedSnapshot.self, from: data) {
+            self.localLS = saved
+        } else {
+            self.localLS = LowSpeedSnapshot()
+        }
+        
+        if let data = UserDefaults.standard.data(forKey: peerLSPersistenceKey),
+           let savedPeer = try? JSONDecoder().decode(LowSpeedSnapshot.self, from: data) {
+            self.peerLS = savedPeer
+        }
+        
         super.init()
+        
         #if canImport(WatchConnectivity)
         if WCSession.isSupported() {
             self.isSessionSupported = true
@@ -67,131 +83,236 @@ public final class WatchConnectivityManager: NSObject, ObservableObject {
         #endif
     }
     
-    // MARK: - Outgoing Transmissions
+    // MARK: - State Mutation & Low-Speed Updates
     
-    /// Sends real-time config updates (typing / settings change).
-    /// Uses real-time `sendMessage` if reachable, alongside `updateApplicationContext` for offline persistence.
-    public func sendConfigUpdate(callsign: String? = nil, roomName: String? = nil, pin: String? = nil, theme: String? = nil) {
-        #if canImport(WatchConnectivity)
-        guard WCSession.isSupported() else { return }
-        let session = WCSession.default
-        guard session.activationState == .activated else { return }
-        
-        var dict: [String: Any] = [
-            AppConstants.WatchConnectivity.messageTypeKey: AppConstants.WatchConnectivity.MessageType.configSync,
-            AppConstants.WatchConnectivity.timestampKey: Date().timeIntervalSince1970
-        ]
-        
-        if let callsign = callsign { dict[AppConstants.WatchConnectivity.callsignKey] = callsign }
-        if let roomName = roomName { dict[AppConstants.WatchConnectivity.roomNameKey] = roomName }
-        if let pin = pin { dict[AppConstants.WatchConnectivity.pinKey] = pin }
-        if let theme = theme { dict[AppConstants.WatchConnectivity.themeKey] = theme }
-        
-        // 1. Send live message if reachable
-        if session.isReachable {
-            session.sendMessage(dict, replyHandler: nil) { error in
-                print("[WatchConnectivity] Live config sendMessage error: \(error.localizedDescription)")
+    /// Updates one or more domain structures owned by this device and evaluates whether convergence retransmission is needed.
+    public func updateLocalStructures(
+        config: ConfigSnapshot? = nil,
+        loginCycle: LoginCycleSnapshot? = nil,
+        membership: MembershipSnapshot? = nil,
+        tactical: TacticalSnapshot? = nil,
+        playerState: PlayerStateSnapshot? = nil
+    ) {
+        contextQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            if let config = config {
+                self.localLS.config = config
             }
-        }
-        
-        // 2. Guaranteed background delivery via application context
-        do {
-            try session.updateApplicationContext(dict)
-        } catch {
-            print("[WatchConnectivity] updateApplicationContext error: \(error.localizedDescription)")
-        }
-        #endif
-    }
-    
-    /// Sends room actions (Host, Join, Leave, Disband).
-    public func sendRoomAction(actionType: String, roomName: String, pin: String? = nil, isHosting: Bool = false) {
-        #if canImport(WatchConnectivity)
-        guard WCSession.isSupported() else { return }
-        let session = WCSession.default
-        guard session.activationState == .activated else { return }
-        
-        var dict: [String: Any] = [
-            AppConstants.WatchConnectivity.messageTypeKey: AppConstants.WatchConnectivity.MessageType.roomAction,
-            AppConstants.WatchConnectivity.actionTypeKey: actionType,
-            AppConstants.WatchConnectivity.roomNameKey: roomName,
-            AppConstants.WatchConnectivity.isHostingKey: isHosting,
-            AppConstants.WatchConnectivity.timestampKey: Date().timeIntervalSince1970
-        ]
-        if let pin = pin { dict[AppConstants.WatchConnectivity.pinKey] = pin }
-        
-        if session.isReachable {
-            session.sendMessage(dict, replyHandler: nil) { error in
-                print("[WatchConnectivity] Live action sendMessage error: \(error.localizedDescription)")
+            if let loginCycle = loginCycle {
+                self.localLS.loginCycle = loginCycle
             }
+            if let membership = membership {
+                self.localLS.membership = membership
+            }
+            if let tactical = tactical {
+                self.localLS.tactical = tactical
+            }
+            if let playerState = playerState {
+                self.localLS.playerState = playerState
+            }
+            
+            self.saveLocalState()
+            self.checkAndTriggerConvergence()
+            self.publishApplicationContext()
         }
-        
-        // Also queue via transferUserInfo to guarantee delivery if connection drops
-        session.transferUserInfo(dict)
-        #endif
     }
     
-    /// Synchronizes the single player identity memberId.
-    public func sendIdentityHandshake(memberId: String) {
-        #if canImport(WatchConnectivity)
-        guard WCSession.isSupported() else { return }
-        let session = WCSession.default
-        guard session.activationState == .activated else { return }
+    // MARK: - High-Speed Outgoing Stream
+    
+    /// Advertises Phone-owned high-speed telemetry snapshot (p2w_hs).
+    public func advertisePhoneHighSpeed(remotePlayerTelemetryJson: String, ttl: TimeInterval = AppConstants.WatchConnectivity.defaultFreshnessTTLSeconds) {
+        guard localRole == .phone else { return }
+        let now = Date().timeIntervalSince1970
+        let hs = PhoneToWatchHighSpeed(freshUntil: now + ttl, remotePlayerTelemetryJson: remotePlayerTelemetryJson)
         
-        let dict: [String: Any] = [
-            AppConstants.WatchConnectivity.messageTypeKey: AppConstants.WatchConnectivity.MessageType.identityHandshake,
-            AppConstants.WatchConnectivity.memberIdKey: memberId,
-            AppConstants.WatchConnectivity.timestampKey: Date().timeIntervalSince1970
-        ]
-        
-        if session.isReachable {
-            session.sendMessage(dict, replyHandler: nil, errorHandler: nil)
+        contextQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.publishApplicationContext(phoneHS: hs)
         }
-        
-        session.transferUserInfo(dict)
-        #endif
     }
     
-    // MARK: - Incoming Message Parsing
+    /// Advertises Watch-owned high-speed heart rate snapshot (w2p_hs).
+    public func advertiseWatchHighSpeed(heartRate: Double, ttl: TimeInterval = AppConstants.WatchConnectivity.defaultFreshnessTTLSeconds) {
+        guard localRole == .watch else { return }
+        let now = Date().timeIntervalSince1970
+        let hs = WatchToPhoneHighSpeed(freshUntil: now + ttl, heartRate: heartRate)
+        
+        contextQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.publishApplicationContext(watchHS: hs)
+        }
+    }
     
-    private func handleIncomingPayload(_ dict: [String: Any]) {
-        guard let msgType = dict[AppConstants.WatchConnectivity.messageTypeKey] as? String else {
+    // MARK: - Convergence & Rolling sync_ts
+    
+    private func checkAndTriggerConvergence() {
+        guard let peer = peerLS else {
+            // No peer snapshot seen yet: start rolling sync_ts to announce local state
+            startRollingSync()
             return
         }
         
+        if localLS.isDomainEquivalent(to: peer) {
+            // Fully converged
+            stopRollingSync()
+        } else {
+            // Discrepancy exists: evaluate whether local device owns any winning structure
+            let (_, localWins) = MergeEngine.merge(local: localLS, peer: peer, localDevice: localRole)
+            if localWins {
+                startRollingSync()
+            } else {
+                stopRollingSync()
+            }
+        }
+    }
+    
+    private func startRollingSync() {
+        guard !isRollingSync else { return }
+        #if canImport(WatchConnectivity)
+        guard WCSession.isSupported() else { return }
+        #if os(iOS)
+        guard WCSession.default.isPaired && WCSession.default.isWatchAppInstalled else { return }
+        #endif
+        #endif
+        isRollingSync = true
+        
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            switch msgType {
-            case AppConstants.WatchConnectivity.MessageType.configSync:
-                let payload = WCConfigPayload(
-                    callsign: dict[AppConstants.WatchConnectivity.callsignKey] as? String,
-                    roomName: dict[AppConstants.WatchConnectivity.roomNameKey] as? String,
-                    pin: dict[AppConstants.WatchConnectivity.pinKey] as? String,
-                    theme: dict[AppConstants.WatchConnectivity.themeKey] as? String
-                )
-                self.onConfigReceived?(payload)
-                
-            case AppConstants.WatchConnectivity.MessageType.roomAction:
-                if let action = dict[AppConstants.WatchConnectivity.actionTypeKey] as? String,
-                   let roomName = dict[AppConstants.WatchConnectivity.roomNameKey] as? String {
-                    let pin = dict[AppConstants.WatchConnectivity.pinKey] as? String
-                    let isHosting = dict[AppConstants.WatchConnectivity.isHostingKey] as? Bool ?? false
-                    let actionPayload = WCRoomAction(
-                        actionType: action,
-                        roomName: roomName,
-                        pin: pin,
-                        isHosting: isHosting
-                    )
-                    self.onRoomActionReceived?(actionPayload)
+            self.rollingTimer?.cancel()
+            self.rollingTimer = Timer.publish(every: AppConstants.WatchConnectivity.defaultHighSpeedCadenceSeconds, on: .main, in: .common)
+                .autoconnect()
+                .sink { [weak self] _ in
+                    self?.rollSyncTimestampAndPublish()
                 }
-                
-            case AppConstants.WatchConnectivity.MessageType.identityHandshake:
-                if let memberId = dict[AppConstants.WatchConnectivity.memberIdKey] as? String {
-                    self.onIdentityReceived?(memberId)
+        }
+    }
+    
+    public func stopRollingSync() {
+        isRollingSync = false
+        DispatchQueue.main.async { [weak self] in
+            self?.rollingTimer?.cancel()
+            self?.rollingTimer = nil
+        }
+    }
+    
+    private func rollSyncTimestampAndPublish() {
+        contextQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.localLS.syncTs = Date().timeIntervalSince1970
+            self.saveLocalState()
+            self.publishApplicationContext()
+        }
+    }
+    
+    // MARK: - Publishing to WCSession
+    
+    private var lastPublishedPhoneHS: PhoneToWatchHighSpeed?
+    private var lastPublishedWatchHS: WatchToPhoneHighSpeed?
+    
+    private func publishApplicationContext(
+        phoneHS: PhoneToWatchHighSpeed? = nil,
+        watchHS: WatchToPhoneHighSpeed? = nil
+    ) {
+        #if canImport(WatchConnectivity)
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        guard session.activationState == .activated else { return }
+        #if os(iOS)
+        guard session.isPaired && session.isWatchAppInstalled else { return }
+        #endif
+        
+        if let phs = phoneHS { lastPublishedPhoneHS = phs }
+        if let whs = watchHS { lastPublishedWatchHS = whs }
+        
+        var envelope = ApplicationContextEnvelope()
+        if localRole == .phone {
+            envelope.p2wLS = localLS
+            envelope.p2wHS = lastPublishedPhoneHS
+        } else {
+            envelope.w2pLS = localLS
+            envelope.w2pHS = lastPublishedWatchHS
+        }
+        
+        guard let data = try? JSONEncoder().encode(envelope),
+              let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
+        
+        do {
+            try session.updateApplicationContext(dict)
+        } catch {
+            // Silently handle context update error to avoid crashing
+        }
+        #endif
+    }
+    
+    // MARK: - Processing Incoming Envelopes
+    
+    public func handleIncomingApplicationContext(_ dict: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let envelope = try? JSONDecoder().decode(ApplicationContextEnvelope.self, from: data) else { return }
+        
+        contextQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            // 1. Process High-Speed Payloads (Unidirectional)
+            if self.localRole == .watch, let p2wHS = envelope.p2wHS {
+                self.latestRemoteHSFreshUntil = p2wHS.freshUntil
+                self.latestRemoteTelemetryJson = p2wHS.remotePlayerTelemetryJson
+                DispatchQueue.main.async {
+                    self.onHighSpeedTelemetryReceived?(p2wHS.remotePlayerTelemetryJson, p2wHS.freshUntil)
                 }
-                
-            default:
-                break
+            } else if self.localRole == .phone, let w2pHS = envelope.w2pHS {
+                self.latestRemoteHSFreshUntil = w2pHS.freshUntil
+                self.latestRemoteHeartRate = w2pHS.heartRate
+                DispatchQueue.main.async {
+                    self.onHighSpeedHeartRateReceived?(w2pHS.heartRate, w2pHS.freshUntil)
+                }
             }
+            
+            // 2. Process Low-Speed Payloads (Bidirectional Merge)
+            let peerSnapshot = (self.localRole == .phone) ? envelope.w2pLS : envelope.p2wLS
+            if let peer = peerSnapshot {
+                self.peerLS = peer
+                self.savePeerState()
+                
+                // Merge peer snapshot into local snapshot
+                let (mergedLocal, localWins) = MergeEngine.merge(local: self.localLS, peer: peer, localDevice: self.localRole)
+                let localChanged = !self.localLS.isDomainEquivalent(to: mergedLocal)
+                self.localLS = mergedLocal
+                self.saveLocalState()
+                
+                if localWins {
+                    self.startRollingSync()
+                } else if self.localLS.isDomainEquivalent(to: peer) {
+                    self.stopRollingSync()
+                } else {
+                    // Local lost all discrepancies, stop rolling sync_ts
+                    self.stopRollingSync()
+                }
+                
+                // If local state adopted winning peer structures or changed, publish updated local snapshot
+                if localChanged {
+                    self.publishApplicationContext()
+                }
+                
+                DispatchQueue.main.async {
+                    self.onLowSpeedConvergenceStateChanged?(self.localLS)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Local Persistence
+    
+    private func saveLocalState() {
+        if let data = try? JSONEncoder().encode(localLS) {
+            UserDefaults.standard.set(data, forKey: localLSPersistenceKey)
+        }
+    }
+    
+    private func savePeerState() {
+        if let peer = peerLS, let data = try? JSONEncoder().encode(peer) {
+            UserDefaults.standard.set(data, forKey: peerLSPersistenceKey)
         }
     }
 }
@@ -201,16 +322,27 @@ extension WatchConnectivityManager: WCSessionDelegate {
     public func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         DispatchQueue.main.async {
             self.isReachable = session.isReachable
+            self.onReachabilityChanged?(session.isReachable)
             #if os(iOS)
             self.isPaired = session.isPaired
             self.isWatchAppInstalled = session.isWatchAppInstalled
             #endif
+        }
+        
+        if activationState == .activated {
+            let receivedContext = session.receivedApplicationContext
+            if !receivedContext.isEmpty {
+                handleIncomingApplicationContext(receivedContext)
+            } else {
+                publishApplicationContext()
+            }
         }
     }
     
     public func sessionReachabilityDidChange(_ session: WCSession) {
         DispatchQueue.main.async {
             self.isReachable = session.isReachable
+            self.onReachabilityChanged?(session.isReachable)
         }
     }
     
@@ -218,7 +350,6 @@ extension WatchConnectivityManager: WCSessionDelegate {
     public func sessionDidBecomeInactive(_ session: WCSession) { }
     
     public func sessionDidDeactivate(_ session: WCSession) {
-        // Re-activate session if user switches watches
         WCSession.default.activate()
     }
     
@@ -230,24 +361,8 @@ extension WatchConnectivityManager: WCSessionDelegate {
     }
     #endif
     
-    // 1. Live interactive messages
-    public func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
-        handleIncomingPayload(message)
-    }
-    
-    public func session(_ session: WCSession, didReceiveMessage message: [String : Any], replyHandler: @escaping ([String : Any]) -> Void) {
-        handleIncomingPayload(message)
-        replyHandler(["status": "acknowledged"])
-    }
-    
-    // 2. Application Context updates
     public func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String : Any]) {
-        handleIncomingPayload(applicationContext)
-    }
-    
-    // 3. User Info transfers
-    public func session(_ session: WCSession, didReceiveUserInfo userInfo: [String : Any] = [:]) {
-        handleIncomingPayload(userInfo)
+        handleIncomingApplicationContext(applicationContext)
     }
 }
 #endif
